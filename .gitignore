@@ -1,0 +1,19 @@
+*.pyc
+__pycache__
+  
+# Distribution / packaging
+develop-eggs/
+dist/
+eggs/
+.eggs/
+*.egg-info/
+*.egg
+
+.idea
+cmake-build-debug
+obj
+bin
+
+ephemeris-compute
+output
+

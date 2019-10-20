@@ -28,5 +28,7 @@ double angDist_RADec(double ra0, double dec0, double ra1, double dec1);
 
 void ra_dec_from_j2000(double ra0, double dec0, double utc_new, double *ra_out, double *dec_out);
 
+void ra_dec_to_j2000(double ra1, double dec1, double utc_old, double *ra_out, double *dec_out);
+
 #endif
 

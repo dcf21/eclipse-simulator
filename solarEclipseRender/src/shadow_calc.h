@@ -31,11 +31,14 @@ double siderealTime(double JD);
 
 void pos3D(double *out, double lat, double lng);
 
-int testIfAnnularEclipse(double lat, double lng,
+void earthTopocentricPositionICRF(double *out, double lat, double lng, double radius_in_earth_radii,
+                                  const double *pos_earth, double epoch, double sidereal_time);
+
+int testIfAnnularEclipse(double lat, double lng, double JD,
                          double radius, const double *pos_sun, const double *pos_moon, const double *pos_earth,
                          double sidereal_time);
 
-double getShadowFraction(double lat, double lng,
+double getShadowFraction(double lat, double lng, double JD,
                          double radius, const double *pos_sun, const double *pos_moon, const double *pos_earth,
                          double sidereal_time);
 
@@ -47,10 +50,12 @@ void calculate_where_sun_overhead(double *lat_sun, double *lng_sun, double *side
                                   const double *pos_sun, const double *pos_earth, double jd);
 
 shadow_map *calculate_eclipse_map_2d(const settings *config,
-                                     double jd, const double *pos_sun, const double *pos_earth, const double *pos_moon,
+                                     double jd, const double *pos_sun, const double *pos_earth,
+                                     const double *pos_moon,
                                      time_span *span_output, shadow_map *greatest_shadow);
 
 shadow_map *calculate_eclipse_map_3d(const settings *config,
-                                     double jd, const double *pos_sun, const double *pos_earth, const double *pos_moon);
+                                     double jd, const double *pos_sun, const double *pos_earth,
+                                     const double *pos_moon);
 
 #endif

@@ -102,3 +102,34 @@ void ra_dec_from_j2000(double ra0, double dec0, double utc_new, double *ra_out, 
     *ra_out = ra_new * 12 / M_PI;
     *dec_out = dec_new * 180 / M_PI;
 }
+
+//! ra_dec_to_j2000 - Convert celestial coordinates from an arbitrary epoch to J2000.
+//! See Green's Spherical Astronomy, pp 222-225
+//! \param [in] ra0 - Right ascension, in hours, original epoch
+//! \param [in] dec0 - Declination, in degrees, original epoch
+//! \param [in] utc_old - Unix time of the epoch we are to transform celestial coordinates from
+//! \param [out] ra_out - Output right ascension, in hours, epoch J2000
+//! \param [out] dec_out - Output declination, in degrees, epoch J2000
+void ra_dec_to_j2000(double ra1, double dec1, double utc_old, double *ra_out, double *dec_out) {
+
+    // Convert inputs into radians
+    ra1 *= M_PI / 12;
+    dec1 *= M_PI / 180;
+
+    const double u = utc_old;
+    const double j = 40587.5 + u / 86400.0; // Julian date - 2400000
+    const double t = (j - 51545.0) / 36525.0; // Julian century (no centuries since 2000.0)
+
+    const double deg = M_PI / 180;
+    const double m = (1.281232 * t + 0.000388 * t * t) * deg;
+    const double n = (0.556753 * t + 0.000119 * t * t) * deg;
+
+    const double ra_m = ra1 - 0.5 * (m + n * sin(ra1) * tan(dec1));
+    const double dec_m = dec1 - 0.5 * n * cos(ra_m);
+
+    const double ra_new = ra1 - m - n * sin(ra_m) * tan(dec_m);
+    const double dec_new = dec1 - n * cos(ra_m);
+
+    *ra_out = ra_new * 12 / M_PI;
+    *dec_out = dec_new * 180 / M_PI;
+}

@@ -23,6 +23,8 @@
 #include <stdio.h>
 #include <math.h>
 
+#include <gsl/gsl_math.h>
+
 #include "coreUtils/strConstants.h"
 
 #include "ephemeris.h"
@@ -71,7 +73,8 @@ void update_binary_map(const settings *config, unsigned char *eclipse_maps, cons
 
             // Set pixel value
             const int offset = p0 + p1 * config->x_size_2d;
-            eclipse_maps[x + stride0 * (y + stride1 * k)] = (int) (100 * shadow_map->map[offset]);
+            const double shadow_fraction = gsl_max(0, shadow_map->map[offset]);  // may be -1 when in Earth shadow
+            eclipse_maps[x + stride0 * (y + stride1 * k)] = (int) (100 * shadow_fraction);
         }
 }
 

@@ -28,6 +28,9 @@
 #include "settings.h"
 #include "shadow_calc.h"
 
+#include "mathsTools/julianDate.h"
+#include "mathsTools/sphericalAst.h"
+
 /**
  * siderealTime - Turns a Julian date into a sidereal time (in hours, at Greenwich)
  * @param JD [in] - Julian date
@@ -38,7 +41,7 @@ double siderealTime(double JD) {
     return fmod(M_PI / 180 * (
             280.46061837 +
             360.98564736629 * (JD - 51545.0) +
-            0.000387933 * T * T +
+            0.000387933 * T * T -
             T * T * T / 38710000.0
     ), 2 * M_PI);
 }
@@ -56,6 +59,44 @@ void pos3D(double *out, double lat, double lng) {
     out[0] = cos(lng) * cos(lat);
     out[1] = sin(lng) * cos(lat);
     out[2] = sin(lat);
+}
+
+/**
+ * earthTopocentricPositionICRF - Return the 3D position of a point on the Earth's surface, in ICRF coordinates,
+ * relative to the solar system barycentre (the origin and coordinate system used by DE405).
+ * @param out [out] - A three-component Cartesian vector.
+ * @param lat [in] - Latitude, degrees
+ * @param lng [in] - Longitude, degrees
+ * @param radius_in_earth_radii [in] - The radial position, in Earth radii, of the location to query. Set to 1 for
+ * Earth's surface.
+ * @param pos_earth [in] - The 3D position of the centre of the Earth at the epoch, as quoted by DE405
+ * @param epoch [in] - The Julian Day number when the calculation is to be performed
+ * @param sidereal_time [in] - Sidereal time in degrees
+ */
+void earthTopocentricPositionICRF(double *out, double lat, double lng, double radius_in_earth_radii,
+                                  const double *pos_earth, double epoch, double sidereal_time) {
+
+    // In degrees, the declination and RA of the point on the sky directly above the requested point, for the
+    // ecliptic of the epoch.
+    const double lat_at_epoch = lat;
+    const double lng_at_epoch = lng + sidereal_time;
+
+    // Distance from Earth's centre, AU
+    const double radius = sqrt(
+            gsl_pow_2(RADIUS_EARTH_EQUATOR * cos(lat_at_epoch * M_PI / 180)) +
+            gsl_pow_2(RADIUS_EARTH_POLE * sin(lat_at_epoch * M_PI / 180))
+    ) / AU * radius_in_earth_radii;
+
+    // Transform into J2000.0
+    double lat_j2000, lng_j2000;
+    ra_dec_to_j2000(lng_at_epoch * 12. / 180, lat_at_epoch, unix_from_jd(epoch), &lng_j2000, &lat_j2000);
+    lng_j2000 *= 180. / 12;
+
+    // Output position relative to the solar system barycentre, in ICRF coordinates
+    pos3D(out, lat_j2000, lng_j2000);
+    out[0] = out[0] * radius + pos_earth[0];
+    out[1] = out[1] * radius + pos_earth[1];
+    out[2] = out[2] * radius + pos_earth[2];
 }
 
 /**
@@ -91,6 +132,7 @@ double _shadowFraction(double p, double z) {
  * time.
  * @param lat - Latitude, degrees
  * @param lng - Longitude, degrees
+ * @param JD - The epoch, as a Julian day number
  * @param radius - The radial position, in Earth radii, of the location to query. Set to 1 for Earth's surface.
  * @param pos_sun - The position of the Sun, as returned by ephemerisCompute, in AU, relative to solar system barycentre
  * @param pos_moon - The position of the Moon, as returned by ephemerisCompute
@@ -98,25 +140,15 @@ double _shadowFraction(double p, double z) {
  * @param sidereal_time - Sidereal time, radians
  * @return - Boolean flag indicating whether an annular eclipse is visible
  */
-int testIfAnnularEclipse(double lat, double lng,
+int testIfAnnularEclipse(double lat, double lng, double JD,
                          double radius, const double *pos_sun, const double *pos_moon, const double *pos_earth,
                          double sidereal_time) {
     double x0[3];
-    pos3D(x0, lat, lng);
-    x0[0] *= radius * RADIUS_EARTH_EQUATOR / AU;
-    x0[1] *= radius * RADIUS_EARTH_EQUATOR / AU;
-    x0[2] *= radius * RADIUS_EARTH_POLE / AU;
-
-    const double rotang1 = sidereal_time;
-
-    // Tip (x,y) to point y axis not towards zero longitude, but towards RA of zero
-    const double xf = x0[0] * cos(rotang1) - x0[1] * sin(rotang1) + pos_earth[0];
-    const double yf = x0[0] * sin(rotang1) + x0[1] * cos(rotang1) + pos_earth[1];
-    const double zf = x0[2] + pos_earth[2];
+    earthTopocentricPositionICRF(x0, lat, lng, radius, pos_earth, JD, sidereal_time * 180 / M_PI);
 
     // Cosine rule on Sun - Earth - Moon triangle. Lengths in AU.
-    const double a = hypot(hypot(xf - pos_sun[0], yf - pos_sun[1]), zf - pos_sun[2]);
-    const double b = hypot(hypot(xf - pos_moon[0], yf - pos_moon[1]), zf - pos_moon[2]);
+    const double a = hypot(hypot(x0[0] - pos_sun[0], x0[1] - pos_sun[1]), x0[2] - pos_sun[2]);
+    const double b = hypot(hypot(x0[0] - pos_moon[0], x0[1] - pos_moon[1]), x0[2] - pos_moon[2]);
     const double c = hypot(hypot(pos_sun[0] - pos_moon[0], pos_sun[1] - pos_moon[1]), pos_sun[2] - pos_moon[2]);
     const double sun_moon_ang_sep = acos((a * a + b * b - c * c) / (2 * a * b)); // radians
 
@@ -135,6 +167,7 @@ int testIfAnnularEclipse(double lat, double lng,
  * on Earth at a particular time.
  * @param lat - Latitude, degrees
  * @param lng - Longitude, degrees
+ * @param JD - The epoch, as a Julian day number
  * @param radius - The radial position, in Earth radii, of the location to query. Set to 1 for Earth's surface.
  * @param pos_sun - The position of the Sun, as returned by ephemerisCompute, in AU, relative to solar system barycentre
  * @param pos_moon - The position of the Moon, as returned by ephemerisCompute
@@ -142,25 +175,15 @@ int testIfAnnularEclipse(double lat, double lng,
  * @param sidereal_time - Sidereal time, radians
  * @return - Fraction, in the range 0 to 1
  */
-double getShadowFraction(double lat, double lng,
+double getShadowFraction(double lat, double lng, double JD,
                          double radius, const double *pos_sun, const double *pos_moon, const double *pos_earth,
                          double sidereal_time) {
     double x0[3];
-    pos3D(x0, lat, lng);
-    x0[0] *= radius * RADIUS_EARTH_EQUATOR / AU;
-    x0[1] *= radius * RADIUS_EARTH_EQUATOR / AU;
-    x0[2] *= radius * RADIUS_EARTH_POLE / AU;
-
-    const double rotang1 = sidereal_time;
-
-    // Tip (x,y) to point y axis not towards zero longitude, but towards RA of zero
-    const double xf = x0[0] * cos(rotang1) - x0[1] * sin(rotang1) + pos_earth[0];
-    const double yf = x0[0] * sin(rotang1) + x0[1] * cos(rotang1) + pos_earth[1];
-    const double zf = x0[2] + pos_earth[2];
+    earthTopocentricPositionICRF(x0, lat, lng, radius, pos_earth, JD, sidereal_time * 180 / M_PI);
 
     // Cosine rule on Sun - Earth - Moon triangle. Lengths in AU.
-    const double a = hypot(hypot(xf - pos_sun[0], yf - pos_sun[1]), zf - pos_sun[2]);
-    const double b = hypot(hypot(xf - pos_moon[0], yf - pos_moon[1]), zf - pos_moon[2]);
+    const double a = hypot(hypot(x0[0] - pos_sun[0], x0[1] - pos_sun[1]), x0[2] - pos_sun[2]);
+    const double b = hypot(hypot(x0[0] - pos_moon[0], x0[1] - pos_moon[1]), x0[2] - pos_moon[2]);
     const double c = hypot(hypot(pos_sun[0] - pos_moon[0], pos_sun[1] - pos_moon[1]), pos_sun[2] - pos_moon[2]);
     const double sun_moon_ang_sep = acos((a * a + b * b - c * c) / (2 * a * b)); // radians
 
@@ -213,22 +236,32 @@ void shadow_map_free(shadow_map *item) {
 void calculate_where_sun_overhead(double *lat_sun, double *lng_sun, double *sidereal_time,
                                   const double *pos_sun, const double *pos_earth, double jd) {
 
-    double sun_dist, earth_sun_vector[3], earth_sun_unit_vector[3];
+    double earth_sun_vector[3], earth_sun_unit_vector[3];
 
     earth_sun_vector[0] = pos_sun[0] - pos_earth[0];
     earth_sun_vector[1] = pos_sun[1] - pos_earth[1];
     earth_sun_vector[2] = pos_sun[2] - pos_earth[2];
 
     // Distance from Earth to Sun
-    sun_dist = sqrt(gsl_pow_2(earth_sun_vector[0]) + gsl_pow_2(earth_sun_vector[1]) + gsl_pow_2(earth_sun_vector[2]));
+    const double sun_dist = sqrt(
+            gsl_pow_2(earth_sun_vector[0]) +
+            gsl_pow_2(earth_sun_vector[1]) +
+            gsl_pow_2(earth_sun_vector[2])
+    );
 
     earth_sun_unit_vector[0] = earth_sun_vector[0] / sun_dist;
     earth_sun_unit_vector[1] = earth_sun_vector[1] / sun_dist;
     earth_sun_unit_vector[2] = earth_sun_vector[2] / sun_dist;
 
-    *sidereal_time = siderealTime(jd);
-    *lat_sun = asin(earth_sun_unit_vector[2]);
-    *lng_sun = atan2(earth_sun_unit_vector[1], earth_sun_unit_vector[0]) - *sidereal_time;
+    const double dec_sun_j2000 = asin(earth_sun_unit_vector[2]) * 180 / M_PI;
+    const double ra_sun_j2000 = atan2(earth_sun_unit_vector[1], earth_sun_unit_vector[0]) * 12 / M_PI;
+
+    double dec_sun_at_epoch, ra_sun_at_epoch;
+    ra_dec_from_j2000(ra_sun_j2000, dec_sun_j2000, unix_from_jd(jd), &ra_sun_at_epoch, &dec_sun_at_epoch);
+
+    *sidereal_time = siderealTime(jd);  // radians
+    *lat_sun = dec_sun_at_epoch * M_PI / 180;  // radians
+    *lng_sun = ra_sun_at_epoch * M_PI / 12 - *sidereal_time;  // radians
 }
 
 /**
@@ -283,7 +316,7 @@ shadow_map *calculate_eclipse_map_2d(const settings *config,
                 // Do not show shadow on night side of Earth
                 shadow = -1;
             } else {
-                shadow = getShadowFraction(lat, lng, 1, pos_sun, pos_moon, pos_earth, sidereal_time);
+                shadow = getShadowFraction(lat, lng, jd, 1, pos_sun, pos_moon, pos_earth, sidereal_time);
             }
 
             // Update shadow map array to show the eclipse magnitude at this location in the image
@@ -397,7 +430,7 @@ shadow_map *calculate_eclipse_map_3d(const settings *config, double jd, const do
             double lng = atan2(yf, xf) / M_PI * 180;
             double lat = asin(zf) / M_PI * 180;
 
-            double shadow = getShadowFraction(lat, lng, p_radius, pos_sun, pos_moon, pos_earth, sidereal_time);
+            double shadow = getShadowFraction(lat, lng, jd, p_radius, pos_sun, pos_moon, pos_earth, sidereal_time);
 
             if (p_radius > 1) {
                 lng = lat = GSL_NAN;

@@ -97,7 +97,7 @@ int trace_contour_by_eclipse_level(const objective_function *f, int x, int y) {
         if (sun_ang_dist >= M_PI / 2) continue;
 
         // Work out the fraction of the Sun covered by the Moon
-        const double shadow_fraction = getShadowFraction(latitude_deg, longitude_deg, 1,
+        const double shadow_fraction = getShadowFraction(latitude_deg, longitude_deg, jd, 1,
                                                          p.sun_pos, p.moon_pos, p.earth_pos,
                                                          sidereal_time);
 
@@ -154,7 +154,7 @@ int trace_contour_by_annularity(const objective_function *f, int x, int y) {
         if (sun_ang_dist >= M_PI / 2) continue;
 
         // For annular eclipses, look at whether the Moon is contained within the Sun's disk
-        const int is_annular = testIfAnnularEclipse(latitude_deg, longitude_deg, 1,
+        const int is_annular = testIfAnnularEclipse(latitude_deg, longitude_deg, jd, 1,
                                                     p.sun_pos, p.moon_pos, p.earth_pos,
                                                     sidereal_time);
 

@@ -53,8 +53,8 @@ void fetch_ephemeris(const settings *config, ephemeris **output) {
     char ephemeris_compute_command[FNAME_LENGTH];
 
     snprintf(ephemeris_compute_command, FNAME_LENGTH, "%.2048s "
-                                                      "--jd_min %.3f "
-                                                      "--jd_max %.3f "
+                                                      "--jd_min %.14f "
+                                                      "--jd_max %.14f "
                                                       "--jd_step %.14f "
                                                       "--output_format 0 "
                                                       "--output_constellations 0 "

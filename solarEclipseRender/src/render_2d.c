@@ -200,12 +200,12 @@ void render_2d_eclipse_map(settings *config, double jd, jpeg_ptr earthDay, jpeg_
     if (duration > 0) {
         sprintf(scratch, is_total ? "Total" : "Annular");
         gdImageStringFT(NULL, brect, gdTrueColor(255, 255, 0), config->font_name, 13, 0, 0, 0, scratch);
-        gdImageStringFT(frame, brect, gdTrueColor(255, 255, 0), config->font_name, 13, 0, 33 - brect[4] / 2, 52,
+        gdImageStringFT(frame, brect, gdTrueColor(255, 255, 0), config->font_name, 13, 0, 41 - brect[4] / 2, 52,
                         scratch);
 
         sprintf(scratch, "%dm%02ds", (int)(duration / 60), (int)duration % 60);
         gdImageStringFT(NULL, brect, gdTrueColor(255, 255, 0), config->font_name, 15, 0, 0, 0, scratch);
-        gdImageStringFT(frame, brect, gdTrueColor(255, 255, 0), config->font_name, 15, 0, 142 - brect[4], 52,
+        gdImageStringFT(frame, brect, gdTrueColor(255, 255, 0), config->font_name, 15, 0, 146 - brect[4], 52,
                         scratch);
     } else {
         gdImageStringFT(frame, brect, gdTrueColor(255, 255, 0), config->font_name, 13, 0, brect[4] / 2, 52,

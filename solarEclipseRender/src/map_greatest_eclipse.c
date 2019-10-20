@@ -124,10 +124,8 @@ double my_f(const gsl_vector *v, void *params) {
 
     // Project point into Cartesian coordinates
     double pos[3], p0[3], p1[2], p2[3], p3[3];
-    pos3D(pos, lat * 180 / M_PI, (lng + p->sidereal_time) * 180 / M_PI);
-    pos[0] = pos[0] * RADIUS_EARTH_EQUATOR / AU + p->pos_earth[0];
-    pos[1] = pos[1] * RADIUS_EARTH_EQUATOR / AU + p->pos_earth[1];
-    pos[2] = pos[2] * RADIUS_EARTH_POLE / AU + p->pos_earth[2];
+    earthTopocentricPositionICRF(pos, lat * 180 / M_PI, lng * 180 / M_PI, 1,
+                                 p->pos_earth, p->JD, p->sidereal_time * 180 / M_PI);
 
     // Calculate perpendicular distance of point from the Sun-Moon line
     const double perpendicular_dist = (
@@ -319,10 +317,8 @@ eclipse_path_list *map_greatest_eclipse(const settings *config, const ephemeris 
 
         // Project point into Cartesian coordinates
         double pos[3], p0[3], p1[2];
-        pos3D(pos, lat * 180 / M_PI, (lng + p.sidereal_time) * 180 / M_PI);
-        pos[0] = pos[0] * RADIUS_EARTH_EQUATOR / AU + p.pos_earth[0];
-        pos[1] = pos[1] * RADIUS_EARTH_EQUATOR / AU + p.pos_earth[1];
-        pos[2] = pos[2] * RADIUS_EARTH_POLE / AU + p.pos_earth[2];
+        earthTopocentricPositionICRF(pos, lat * 180 / M_PI, lng * 180 / M_PI, 1,
+                                     p.pos_earth, p.JD, p.sidereal_time * 180 / M_PI);
 
         // Test whether greatest eclipse is a total eclipse or an annular eclipse
         const double moon_sun_dist_ratio = (magnitude(subtract(p0, p.pos_moon, pos)) /

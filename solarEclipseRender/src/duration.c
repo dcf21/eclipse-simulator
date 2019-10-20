@@ -19,6 +19,7 @@
 // along with EclipseRender.  If not, see <http://www.gnu.org/licenses/>.
 // -------------------------------------------------
 
+#include <stdio.h>
 #include <math.h>
 
 #include <gsl/gsl_math.h>
@@ -30,6 +31,15 @@
 #include "settings.h"
 #include "shadow_calc.h"
 
+/// eclipse_duration - Calculate the duration of an eclipse, as viewed from a particular place on Earth
+///
+/// \param config [in] - settings
+/// \param ephemeris [in] - an ephemeris computed using <ephemerisCompute>
+/// \param longitude [in] - The latitude at which to calculate the eclipse's duration (radians)
+/// \param latitude [in] - The longitude at which to calculate the eclipse's duration (radians)
+/// \param jd_midpoint [in] - The approximate midpoint of the eclipse as viewed from that location (Julian day)
+/// \param is_total [in] - Boolean flag indicating whether to calculate the duration of totality or annularity
+/// \return Duration, seconds
 double eclipse_duration(const settings *config, const ephemeris *ephemeris,
                         double longitude, double latitude, double jd_midpoint, int is_total) {
     // search for 10 minutes before / after maximum eclipse
@@ -57,13 +67,12 @@ double eclipse_duration(const settings *config, const ephemeris *ephemeris,
         calculate_where_sun_overhead(&lat_sun, &lng_sun, &sidereal_time, p.sun_pos, p.earth_pos, jd);
 
         // Shadow fraction is zero if the Sun is below the horizon
-        const double sun_ang_dist = angDist_RADec(longitude * M_PI / 180, latitude * M_PI / 180, lng_sun,
-                                                  lat_sun);
+        const double sun_ang_dist = angDist_RADec(longitude, latitude, lng_sun, lat_sun);
         if (sun_ang_dist >= M_PI / 2) continue;
 
         if (is_total) {
             // For total eclipses, the duration of the eclipse is defined by when the shadow fraction is 100%
-            const double shadow_fraction = getShadowFraction(latitude * 180 / M_PI, longitude * 180 / M_PI, 1,
+            const double shadow_fraction = getShadowFraction(latitude * 180 / M_PI, longitude * 180 / M_PI, jd, 1,
                                                              p.sun_pos, p.moon_pos, p.earth_pos,
                                                              sidereal_time);
 
@@ -73,7 +82,7 @@ double eclipse_duration(const settings *config, const ephemeris *ephemeris,
             }
         } else {
             // For annular eclipses, look at whether the Moon is contained within the Sun's disk
-            const int is_annular = testIfAnnularEclipse(latitude * 180 / M_PI, longitude * 180 / M_PI, 1,
+            const int is_annular = testIfAnnularEclipse(latitude * 180 / M_PI, longitude * 180 / M_PI, jd, 1,
                                                         p.sun_pos, p.moon_pos, p.earth_pos,
                                                         sidereal_time);
 

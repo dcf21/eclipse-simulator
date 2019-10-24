@@ -26,6 +26,7 @@ import json
 import logging
 import os
 import sys
+import zipfile
 
 src_path = os.getcwd()
 out_path = os.path.join(src_path, "output")
@@ -38,8 +39,12 @@ class KMLTemplate:
 
     kml_document = """\
 <?xml version="1.0" encoding="UTF-8"?>
-<kml xmlns="http://www.opengis.net/kml/2.2">
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
   <Document>
+    <atom:author>
+      <atom:name>Dominic Ford</atom:name>
+    </atom:author>
+    <atom:link href="https://in-the-sky.org/eclipses" />
     <Style id="eclipseOuter">
       <PolyStyle>
         <color>30000000</color>
@@ -173,7 +178,7 @@ def make_kml():
     item_count = 10
     for number, item in enumerate(json_data[:item_count]):
         logging.info("Longest compute times {n}/{c}: {k} - {t} ({d:.1f} min)".
-                     format(n=number + 1, c=item_count, k=item['event_key'], t=item['event_title'],
+                     format(n=number + 1, c=len(json_data), k=item['event_key'], t=item['event_title'],
                             d=item['compute_duration'] / 60.))
 
     # Sort items in order of duration error, and name the worst offenders
@@ -182,7 +187,7 @@ def make_kml():
     item_count = 25
     for number, item in enumerate(json_data[:item_count]):
         logging.info("Worst durations {n}/{c}: {k} - {t} ({d1:5.1f} vs {d2:5.1f})".
-                     format(n=number + 1, c=item_count, k=item['event_key'], t=item['event_title'],
+                     format(n=number + 1, c=len(json_data), k=item['event_key'], t=item['event_title'],
                             d1=item['event_duration_ford'], d2=item['event_duration_espenak']))
 
     # Sort items into chronological order
@@ -199,10 +204,15 @@ def make_kml():
         flattened_path = [point for path in item['path'] for point in path[1]]
         midpoint = [approx(x) for x in flattened_path[int(len(flattened_path) / 2)][1:3]]
 
-        # Shorten paths
         path_list = []
         for x in item['path']:
+            # Shorten paths to include only every 5th point
             points = [[approx(p[1]), approx(p[2])] for p in x[1][::5]]
+
+            # Make sure we include the final point
+            points.append([approx(x[1][-1][1]), approx(x[1][-1][2])])
+
+            # Add this path to the list of paths
             path_list.append([x[0], points])
 
         # Append item to list
@@ -242,10 +252,13 @@ def make_kml():
                                                                 else "eclipseInner"),
                                                             point_string=point_string)
 
-        # Write KML output
-        filename = os.path.join(out_path, "{}.kml".format(item['filename'][:-5]))
-        with open(filename, "w") as f:
-            f.write(kml_template.kml_document.format(body=kml_body))
+        # Write KMZ output
+        file_stub = os.path.split(item['filename'])[1][:-5]
+        filename = os.path.join(out_path, "{}.kmz".format(file_stub))
+        with zipfile.ZipFile(filename, "w") as myzip:
+            kml_filename = "{}.kml".format(file_stub)
+            with myzip.open(kml_filename, "w") as f:
+                f.write(kml_template.kml_document.format(body=kml_body).encode('utf-8'))
 
 
 # Do it right away if we're run as a script

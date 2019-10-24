@@ -29,8 +29,6 @@ typedef struct shadow_map {
 
 double siderealTime(double JD);
 
-void pos3D(double *out, double lat, double lng);
-
 void earthTopocentricPositionICRF(double *out, double lat, double lng, double radius_in_earth_radii,
                                   const double *pos_earth, double epoch, double sidereal_time);
 

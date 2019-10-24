@@ -47,21 +47,6 @@ double siderealTime(double JD) {
 }
 
 /**
- * pos3D - Convert a latitude and longitude into a unit vector in Cartesian coordinates, where z-axis is orientated
- * in the direction of the north pole, and x-axis points towards zero point of longitude.
- * @param out [out] - A three-component Cartesian vector.
- * @param lat [in] - Latitude, degrees
- * @param lng [in] - Longitude, degrees
- */
-void pos3D(double *out, double lat, double lng) {
-    lat *= M_PI / 180;
-    lng *= M_PI / 180;
-    out[0] = cos(lng) * cos(lat);
-    out[1] = sin(lng) * cos(lat);
-    out[2] = sin(lat);
-}
-
-/**
  * earthTopocentricPositionICRF - Return the 3D position of a point on the Earth's surface, in ICRF coordinates,
  * relative to the solar system barycentre (the origin and coordinate system used by DE405).
  * @param out [out] - A three-component Cartesian vector.
@@ -76,27 +61,37 @@ void pos3D(double *out, double lat, double lng) {
 void earthTopocentricPositionICRF(double *out, double lat, double lng, double radius_in_earth_radii,
                                   const double *pos_earth, double epoch, double sidereal_time) {
 
-    // In degrees, the declination and RA of the point on the sky directly above the requested point, for the
-    // ecliptic of the epoch.
-    const double lat_at_epoch = lat;
-    const double lng_at_epoch = lng + sidereal_time;
+    // In radians, the geodetic coordinates of the requested point, rotated to place RA=0 at longitude 0
+    const double lat_geodetic = lat * M_PI / 180;
+    const double lng_geodetic = (lng + sidereal_time) * M_PI / 180;
 
-    // Distance from Earth's centre, AU
-    const double radius = sqrt(
-            gsl_pow_2(RADIUS_EARTH_EQUATOR * cos(lat_at_epoch * M_PI / 180)) +
-            gsl_pow_2(RADIUS_EARTH_POLE * sin(lat_at_epoch * M_PI / 180))
-    ) / AU * radius_in_earth_radii;
+    // Position in WGS84 coordinate system
+    // See <https://en.wikipedia.org/wiki/Reference_ellipsoid>
+    const double altitude = 0;  // metres
+
+    const double n = gsl_pow_2(RADIUS_EARTH_EQUATOR) / sqrt(gsl_pow_2(RADIUS_EARTH_EQUATOR * cos(lat_geodetic)) +
+                                                            gsl_pow_2(RADIUS_EARTH_POLE * sin(lat_geodetic)));
+    const double x = (n + altitude) * cos(lng_geodetic) * cos(lat_geodetic);
+    const double y = (n + altitude) * sin(lng_geodetic) * cos(lat_geodetic);
+    const double z = (gsl_pow_2(RADIUS_EARTH_POLE / RADIUS_EARTH_EQUATOR) * n + altitude) * sin(lat_geodetic);
+
+    // Work out RA and Dec of star above this point, for ecliptic of epoch
+    const double radius_geoid = sqrt(gsl_pow_2(x) + gsl_pow_2(y) + gsl_pow_2(z));  // metres
+
+    const double lat_at_epoch = asin(z / radius_geoid);  // planetocentric coordinates; radians
+    const double lng_at_epoch = atan2(y, x);  // planetocentric coordinates; radians
 
     // Transform into J2000.0
-    double lat_j2000, lng_j2000;
-    ra_dec_to_j2000(lng_at_epoch * 12. / 180, lat_at_epoch, unix_from_jd(epoch), &lng_j2000, &lat_j2000);
-    lng_j2000 *= 180. / 12;
+    double lat_j2000, lng_j2000; // radians
+    ra_dec_to_j2000(lng_at_epoch * 12. / M_PI, lat_at_epoch * 180 / M_PI, unix_from_jd(epoch), &lng_j2000, &lat_j2000);
+    lng_j2000 *= M_PI / 12;
+    lat_j2000 *= M_PI / 180;
 
     // Output position relative to the solar system barycentre, in ICRF coordinates
-    pos3D(out, lat_j2000, lng_j2000);
-    out[0] = out[0] * radius + pos_earth[0];
-    out[1] = out[1] * radius + pos_earth[1];
-    out[2] = out[2] * radius + pos_earth[2];
+    const double radius_requested = radius_geoid * radius_in_earth_radii / AU;  // AU
+    out[0] = cos(lat_j2000) * cos(lng_j2000) * radius_requested + pos_earth[0];
+    out[1] = cos(lat_j2000) * sin(lng_j2000) * radius_requested + pos_earth[1];
+    out[2] = sin(lat_j2000) * radius_requested + pos_earth[2];
 }
 
 /**
@@ -296,19 +291,10 @@ shadow_map *calculate_eclipse_map_2d(const settings *config,
             double lng = (x * 360. / config->x_size_2d) + (-180) + 360;
             while (lng > 180) lng -= 360;
 
-            // Convert point into 3D Cartesian space, with distances in Earth radii
-            double pPoint[3];
-            pos3D(pPoint, lat, lng);
+            // Work out whether the Sun is above the horizon at this point
+            const double ang_dist_sun = angDist_RADec(lng * M_PI / 180, lat * M_PI / 180, lng_sun, lat_sun);
 
-            // Look up the point on the Earth's surface where the Sun is directly overhead
-            double sun0[3];
-            pos3D(sun0, lat_sun * 180 / M_PI, lng_sun * 180 / M_PI);
-
-            // Look up the distance between the two points. If this is greater than sqrt(2), then Sun below horizon.
-            const double d = gsl_pow_2(pPoint[0] - sun0[0]) +
-                             gsl_pow_2(pPoint[1] - sun0[1]) +
-                             gsl_pow_2(pPoint[2] - sun0[2]);
-            const int night_time = (d > 2);
+            const int night_time = (ang_dist_sun > M_PI / 2);
 
             // Superimpose shadow map over Earth
             double shadow;

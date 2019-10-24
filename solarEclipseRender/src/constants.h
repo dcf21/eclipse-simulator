@@ -31,8 +31,10 @@
 #define RADIUS_SUN    695700e3    /* metres */
 #define AU            149597871e3 /* metres */
 
-#define RADIUS_EARTH_EQUATOR 6378.1e3 /* metres */
-#define RADIUS_EARTH_POLE    6356.8e3 /* metres */
+// Values taken from WGS84
+// https://en.wikipedia.org/wiki/World_Geodetic_System
+#define RADIUS_EARTH_EQUATOR 6378137. /* metres */
+#define RADIUS_EARTH_POLE    6356752.314245 /* metres */
 #define RADIUS_EARTH_MEAN    6371.0e3 /* metres */
 
 #endif

@@ -27,6 +27,8 @@ typedef struct shadow_map {
     double *lat, *lng;  // degrees
 } shadow_map;
 
+double delta_t(double JD);
+
 double siderealTime(double JD);
 
 void earthTopocentricPositionICRF(double *out, double lat, double lng, double radius_in_earth_radii,

@@ -45,24 +45,11 @@ typedef struct parameters {
     const double *pos_sun;
     const double *pos_earth;
     const double *pos_moon;
-    double JD, sidereal_time;
+    double JD; // TT
+    double sidereal_time;
     double lat_sun, lng_sun;
     double prev_sun_ang_dist;
 } parameters;
-
-/**
- * Cross-product of two three-component vectors.
- * @param out [out] - Output cross product
- * @param a [in] - Vector a
- * @param b [in] - Vector b
- * @return Pointer to out
- */
-double *cross_product(double *out, const double *a, const double *b) {
-    out[0] = a[1] * b[2] - a[2] * b[1];
-    out[1] = a[2] * b[0] - a[0] * b[2];
-    out[2] = a[0] * b[1] - a[1] * b[0];
-    return out;
-}
 
 /**
  * Subtract two three-component vectors.
@@ -85,6 +72,44 @@ double *subtract(double *out, const double *a, const double *b) {
  */
 double magnitude(const double *a) {
     return sqrt(gsl_pow_2(a[0]) + gsl_pow_2(a[1]) + gsl_pow_2(a[2]));
+}
+
+double point_line_distance(const double earth_surface[3], const double pos_sun[3], const double pos_moon[3]) {
+    const double sun_moon_vector[3] = {pos_moon[0] - pos_sun[0],
+                                       pos_moon[1] - pos_sun[1],
+                                       pos_moon[2] - pos_sun[2]
+    };
+
+    const double dist_sun_moon = magnitude(sun_moon_vector);
+    const double sun_moon_unit_vector[3] = {
+            (pos_moon[0] - pos_sun[0]) / dist_sun_moon,
+            (pos_moon[1] - pos_sun[1]) / dist_sun_moon,
+            (pos_moon[2] - pos_sun[2]) / dist_sun_moon
+    };
+
+    const double vector_moon_earth[3] = {
+            earth_surface[0] - pos_moon[0],
+            earth_surface[1] - pos_moon[1],
+            earth_surface[2] - pos_moon[2],
+    };
+
+    const double dot_product = (vector_moon_earth[0] * sun_moon_unit_vector[0] +
+                                vector_moon_earth[1] * sun_moon_unit_vector[1] +
+                                vector_moon_earth[2] * sun_moon_unit_vector[2]);
+
+    const double closest_point_on_line[3] = {
+            pos_moon[0] + dot_product * sun_moon_unit_vector[0],
+            pos_moon[1] + dot_product * sun_moon_unit_vector[1],
+            pos_moon[2] + dot_product * sun_moon_unit_vector[2],
+    };
+
+    const double perpendicular_distance = sqrt(
+            gsl_pow_2(earth_surface[0] - closest_point_on_line[0]) +
+            gsl_pow_2(earth_surface[1] - closest_point_on_line[1]) +
+            gsl_pow_2(earth_surface[2] - closest_point_on_line[2])
+    );
+
+    return perpendicular_distance;
 }
 
 /**
@@ -123,15 +148,12 @@ double my_f(const gsl_vector *v, void *params) {
     }
 
     // Project point into Cartesian coordinates
-    double pos[3], p0[3], p1[2], p2[3], p3[3];
+    double pos[3];
     earthTopocentricPositionICRF(pos, lat * 180 / M_PI, lng * 180 / M_PI, 1,
                                  p->pos_earth, p->JD, p->sidereal_time * 180 / M_PI);
 
     // Calculate perpendicular distance of point from the Sun-Moon line
-    const double perpendicular_dist = (
-            fabs(magnitude(cross_product(p0, subtract(p1, pos, p->pos_sun), subtract(p2, pos, p->pos_moon)))) /
-            fabs(magnitude(subtract(p3, p->pos_moon, p->pos_sun)))
-    );
+    const double perpendicular_dist = point_line_distance(pos, p->pos_sun, p->pos_moon);
 
     return perpendicular_dist;
 }
@@ -139,7 +161,7 @@ double my_f(const gsl_vector *v, void *params) {
 /**
  * eclipse_duration_from_path - Look up the maximum duration of the eclipse at the central point, at a given time.
  * @param paths [in] - The path of the eclipse, as returned by <map_greatest_eclipse>, which includes duration data
- * @param jd [in] - The time point to query, specified as a Julian day number
+ * @param jd [in] - The time point to query, specified as a Julian day number (TT)
  * @param is_total [out] - Flag indicating whether the eclipse is total or annular
  * @return The duration of the eclipse at this time point, in seconds
  */
@@ -186,7 +208,7 @@ eclipse_path_list *map_greatest_eclipse(const settings *config, const ephemeris 
 
     // Work out a critical (angular) distance across the Earth's surface that maximum eclipse needs to move before
     // we write out a new data point. We use this to reduce the number of data points that we write to disk.
-    const double earth_circumference = 2 * M_PI * RADIUS_EARTH_MEAN;
+    const double earth_circumference = 2 * M_PI * RADIUS_EARTH_EQUATOR;
     const double critical_distance = 20e3; // metres
     const double critical_ang_dist = (critical_distance / earth_circumference) * 2 * M_PI;
 
@@ -291,7 +313,7 @@ eclipse_path_list *map_greatest_eclipse(const settings *config, const ephemeris 
         prev_sun_ang_dist = sun_ang_dist;
 
         // If point not on Earth-Moon line, then total eclipse has moved off the Earth's surface
-        if ((!gsl_finite(perpendicular_distance)) || (perpendicular_distance > 0.001 * RADIUS_EARTH_MEAN / AU)) {
+        if ((!gsl_finite(perpendicular_distance)) || (perpendicular_distance > 0.001 * RADIUS_EARTH_EQUATOR / AU)) {
             // Write one final point at the end of the line
             if (gsl_finite(previous_point_calculated.jd) &&
                 (previous_point_calculated.jd != previous_point_written.jd)) {
@@ -307,7 +329,7 @@ eclipse_path_list *map_greatest_eclipse(const settings *config, const ephemeris 
             previous_point_calculated = null_point;
             // fprintf(f,
             //         "## perpendicular_distance = %10.4f (iter %5ld lng %10.5f  lat %10.5f sun_dist %10.5f lng_sun %10.5f  lat_sun %10.5f)\n",
-            //         perpendicular_distance / RADIUS_EARTH_MEAN * AU,
+            //         perpendicular_distance / RADIUS_EARTH_EQUATOR * AU,
             //         iter,
             //         lng * 180 / M_PI, lat * 180 / M_PI,
             //         sun_ang_dist * 180 / M_PI,
@@ -316,7 +338,7 @@ eclipse_path_list *map_greatest_eclipse(const settings *config, const ephemeris 
         }
 
         // Project point into Cartesian coordinates
-        double pos[3], p0[3], p1[2];
+        double pos[3], p0[3], p1[3];
         earthTopocentricPositionICRF(pos, lat * 180 / M_PI, lng * 180 / M_PI, 1,
                                      p.pos_earth, p.JD, p.sidereal_time * 180 / M_PI);
 
@@ -411,9 +433,10 @@ eclipse_path_list *map_greatest_eclipse(const settings *config, const ephemeris 
 
         if (previous_point != NULL) {
             if (!first_point) fprintf(f, ",");
+            // Unix timestamp (UT; not TT), longitude/deg, latitude/deg, duration/sec
             fprintf(f,
                     "[%.1f,%.5f,%.5f,%.1f]",
-                    unix_from_jd(previous_point->jd),
+                    unix_from_jd(previous_point->jd) - delta_t(previous_point->jd),
                     previous_point->longitude * 180 / M_PI, previous_point->latitude * 180 / M_PI,
                     0.
             );
@@ -429,9 +452,10 @@ eclipse_path_list *map_greatest_eclipse(const settings *config, const ephemeris 
             if (duration > maximum_duration) maximum_duration = duration;
 
             if (!first_point) fprintf(f, ",");
+            // Unix timestamp (UT; not TT), longitude/deg, latitude/deg, duration/sec
             fprintf(f,
                     "[%.1f,%.5f,%.5f,%.1f]",
-                    unix_from_jd(p->jd),
+                    unix_from_jd(p->jd) - delta_t(p->jd),
                     p->longitude * 180 / M_PI, p->latitude * 180 / M_PI,
                     duration
             );

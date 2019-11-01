@@ -78,7 +78,7 @@ typedef struct settings {
     int totality_col_b;
 
     /**
-     * Time span for eclipse simulation
+     * Time span for eclipse simulation, specified in TT
      */
     double jd_min, jd_max;
 
@@ -131,7 +131,7 @@ typedef struct settings {
 
 /**
  * time_span - Structure for storing the time span of a solar eclipse.
- * All times stored as Julian day numbers.
+ * All times stored as Julian day numbers, in TT.
  */
 typedef struct time_span {
     double total_start;

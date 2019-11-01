@@ -229,7 +229,7 @@ typedef struct line_status {
 void register_point(const objective_function *f, line_status *s, int x, int y) {
     // Work out a critical (angular) distance across the Earth's surface that maximum eclipse needs to move before
     // we write out a new data point. We use this to reduce the number of data points that we write to disk.
-    const double earth_circumference = 2 * M_PI * RADIUS_EARTH_MEAN;
+    const double earth_circumference = 2 * M_PI * RADIUS_EARTH_EQUATOR;
     const double critical_distance = f->contour_tracing_critical_distance; // metres
     const double critical_ang_dist = (critical_distance / earth_circumference) * 2 * M_PI;
 

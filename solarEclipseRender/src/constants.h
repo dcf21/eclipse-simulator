@@ -26,8 +26,6 @@
  * Physical constants
  */
 
-#define MOON_FUDGE_FACTOR 1.0    /* facility here to increase the size of the Moon to account for atmospheric effects */
-#define RADIUS_MOON   1737.10e3 * MOON_FUDGE_FACTOR /* metres */
 #define RADIUS_SUN    695700e3    /* metres */
 #define AU            149597871e3 /* metres */
 
@@ -35,6 +33,8 @@
 // https://en.wikipedia.org/wiki/World_Geodetic_System
 #define RADIUS_EARTH_EQUATOR 6378137. /* metres */
 #define RADIUS_EARTH_POLE    6356752.314245 /* metres */
-#define RADIUS_EARTH_MEAN    6371.0e3 /* metres */
+
+// Value taken from http://www.eclipsewise.com/help/de405-predictions.html
+#define RADIUS_MOON   (0.272281 * RADIUS_EARTH_EQUATOR) /* metres */
 
 #endif

@@ -44,10 +44,10 @@ void fetch_ephemeris(const settings *config, ephemeris **output) {
     ephemeris *x = (ephemeris *) malloc(sizeof(ephemeris));
 
     // Generous estimate of how many lines we expect ephemerisCompute to return
-    x->point_count = (int) (2 + (config->jd_max - config->jd_min) / jd_step);
+    const int point_count_max = (int) (2 + (config->jd_max - config->jd_min) / jd_step);
 
     // Allocate data to hold the ephemeris
-    x->data = (ephemeris_point *) malloc(x->point_count * sizeof(ephemeris_point));
+    x->data = (ephemeris_point *) malloc(point_count_max * sizeof(ephemeris_point));
 
     // Use ephemerisCompute to track the path of this object
     char ephemeris_compute_command[FNAME_LENGTH];
@@ -69,11 +69,16 @@ void fetch_ephemeris(const settings *config, ephemeris **output) {
     // Loop over the lines returned by ephemerisCompute
     int line_counter = 0;
     while ((!feof(ephemeris_data)) && (!ferror(ephemeris_data))) {
+        int items_fetched;
 
         // Read columns of data
-        fread(&x->data[line_counter].sun_pos, sizeof(double), 3, ephemeris_data);
-        fread(&x->data[line_counter].moon_pos, sizeof(double), 3, ephemeris_data);
-        fread(&x->data[line_counter].earth_pos, sizeof(double), 3, ephemeris_data);
+        items_fetched = (int)fread(&x->data[line_counter].sun_pos, sizeof(double), 3, ephemeris_data);
+        if (items_fetched == 0) break;
+        if (items_fetched < 3) ephem_fatal(__FILE__,__LINE__, "Too few items");
+        items_fetched = (int)fread(&x->data[line_counter].moon_pos, sizeof(double), 3, ephemeris_data);
+        if (items_fetched < 3) ephem_fatal(__FILE__,__LINE__, "Too few items");
+        items_fetched = (int)fread(&x->data[line_counter].earth_pos, sizeof(double), 3, ephemeris_data);
+        if (items_fetched < 3) ephem_fatal(__FILE__,__LINE__, "Too few items");
 
         // Increment data point counter
         line_counter++;

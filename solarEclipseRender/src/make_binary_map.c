@@ -123,8 +123,12 @@ void output_binary_map(const settings *config, const ephemeris *ephemeris, unsig
                     ptrArray[x + y * stride0] = ptr;
 
                     const int offset = j * binary_map_ephemeris_stride;
+
+                    // Julian date; TT
                     const double JD = ephemeris->jd_start + ephemeris->jd_step * offset;
-                    const double utc = 86400.0 * (JD - 2440587.5);
+
+                    // Unix time; UT
+                    const double utc = 86400.0 * (JD - 2440587.5) - delta_t(JD);
 
                     *((double *) (binary_eclipse_maps_2 + ptr)) = utc;
                     ptr += sizeof(double);

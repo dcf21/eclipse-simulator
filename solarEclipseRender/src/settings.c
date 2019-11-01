@@ -26,7 +26,7 @@
 settings default_settings() {
     settings output;
 
-    output.output_dir = "";
+    output.output_dir = "/tmp/eclipse_demo/";
     output.title = "Undefined";
 
     output.x_size_2d = 1600;
@@ -49,6 +49,9 @@ settings default_settings() {
     output.totality_col_r = 200;
     output.totality_col_g = 200;
     output.totality_col_b = 0;
+
+    output.jd_min = 2449483.217363426;
+    output.jd_max = 2449483.217365426;
 
     output.time_resolution = 0.1;
 

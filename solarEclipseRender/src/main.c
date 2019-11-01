@@ -73,9 +73,9 @@ int main(int argc, const char **argv) {
             OPT_HELP(),
             OPT_GROUP("Basic options"),
             OPT_FLOAT('a', "jd_min", &config.jd_min,
-                      "The Julian day number at which the ephemeris should begin"),
+                      "The Julian day number at which the ephemeris should begin; TT"),
             OPT_FLOAT('b', "jd_max", &config.jd_max,
-                      "The Julian day number at which the ephemeris should end"),
+                      "The Julian day number at which the ephemeris should end; TT"),
             OPT_STRING('t', "title", &config.title,
                        "The title of this solar eclipse event."),
             OPT_STRING('o', "output", &config.output_dir,
@@ -140,6 +140,7 @@ int main(int argc, const char **argv) {
 
     // Work out the path of greatest eclipse across the world
     eclipse_path_list *paths = map_greatest_eclipse(&config, ephemeris);
+    // exit(0);
 
     // Loop over video frames
     config.frame_counter = -1;
@@ -179,9 +180,14 @@ int main(int argc, const char **argv) {
     output_binary_map(&config, ephemeris, binary_eclipse_maps);
 
     // Return times when the eclipse begins and ends, in partial and total phases
+    // All times written as Julian day numbers, in UT
+    const double delta_t_days = delta_t(timeSpan.partial_start) / 86400;
     printf("%.10f %.10f %.10f %.10f\n",
-           timeSpan.partial_start, timeSpan.partial_end,
-           timeSpan.total_start, timeSpan.total_end);
+           timeSpan.partial_start - delta_t_days,
+           timeSpan.partial_end - delta_t_days,
+           timeSpan.total_start - delta_t_days,
+           timeSpan.total_end - delta_t_days
+           );
 
     // Clean up and exit
     if (DEBUG) ephem_log("Freeing data structures.");

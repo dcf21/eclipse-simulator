@@ -70,7 +70,7 @@ void drawShadowContours(gdImagePtr frame, const shadow_map *shadow, int xs, int 
  * ideal for turning into an animation of the eclipse's process if snapshots are turned into a video.
  *
  * @param config [in] - The settings for this eclipse simulation, including, e.g. the output image size
- * @param jd [in] - The Julian day number of the current point in the simulation
+ * @param jd [in] - The Julian day number of the current point in the simulation (TT)
  * @param earthDay [in] - A JPEG image of the world in daylight
  * @param earthNight [in] - A JPEG image of the world by night
  * @param shadow_map [in] - A binary map of the eclipse magnitude across the world
@@ -157,10 +157,11 @@ void render_2d_eclipse_map(settings *config, double jd, jpeg_ptr earthDay, jpeg_
     int is_total;
     const double duration = eclipse_duration_from_path(eclipse_path, jd, &is_total);
 
-    // Get date components
+    // Get date components (in UT; not TT)
     int year, month, day, hour, min, status = 0;
     double sec;
-    inv_julian_day(jd, &year, &month, &day, &hour, &min, &sec, &status, temp_err_string);
+    inv_julian_day(jd - delta_t(jd) / 86400.,
+                   &year, &month, &day, &hour, &min, &sec, &status, temp_err_string);
 
     // Write the time and date in bottom left corner of the image
     int brect[8];
@@ -203,7 +204,7 @@ void render_2d_eclipse_map(settings *config, double jd, jpeg_ptr earthDay, jpeg_
         gdImageStringFT(frame, brect, gdTrueColor(255, 255, 0), config->font_name, 13, 0, 41 - brect[4] / 2, 52,
                         scratch);
 
-        sprintf(scratch, "%dm%02ds", (int)(duration / 60), (int)duration % 60);
+        sprintf(scratch, "%dm%02ds", (int) (duration / 60), (int) duration % 60);
         gdImageStringFT(NULL, brect, gdTrueColor(255, 255, 0), config->font_name, 15, 0, 0, 0, scratch);
         gdImageStringFT(frame, brect, gdTrueColor(255, 255, 0), config->font_name, 15, 0, 146 - brect[4], 52,
                         scratch);

@@ -54,8 +54,12 @@ double eclipse_duration(const settings *config, const ephemeris *ephemeris,
     const double jd_search_end = jd_midpoint + (search_span / 86400);
 
     // first and last point numbers in the ephemeris structure that we need to analyse
-    const int point_start = (int) ((jd_search_start - ephemeris->jd_start) / ephemeris->jd_step);
-    const int point_end = (int) ((jd_search_end - ephemeris->jd_start) / ephemeris->jd_step);
+    int point_start = (int) ((jd_search_start - ephemeris->jd_start) / ephemeris->jd_step);
+    int point_end = (int) ((jd_search_end - ephemeris->jd_start) / ephemeris->jd_step);
+
+    // check that search limits are within range
+    if (point_start < 0) point_start = 0;
+    if (point_end > ephemeris->point_count) point_end = ephemeris->point_count;
 
     // loop over the ephemeris points that we are to analyse
     for (int j = point_start; j < point_end; j++) {

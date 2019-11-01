@@ -33,7 +33,7 @@ typedef struct ephemeris_point {
 
 //! A structure defining an ephemeris of a solar system object
 typedef struct ephemeris {
-    double jd_start, jd_end, jd_step; // Julian day numbers
+    double jd_start, jd_end, jd_step; // Julian day numbers; TT
     int point_count;
     ephemeris_point *data;
 } ephemeris;

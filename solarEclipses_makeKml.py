@@ -41,16 +41,22 @@ class KMLTemplate:
 <?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
   <Document>
+    <name><![CDATA[{title}]]></name>
+    <description><![CDATA[{description}]]></description>
     <atom:author>
       <atom:name>Dominic Ford</atom:name>
     </atom:author>
     <atom:link href="https://in-the-sky.org/eclipses" />
     <Style id="eclipseOuter">
       <PolyStyle>
-        <color>30000000</color>
+        <color>40000000</color>
         <fill>1</fill>
         <outline>1</outline>
       </PolyStyle>
+      <LineStyle>
+        <color>FF00FFFF</color>
+        <width>2</width>
+      </LineStyle>
     </Style>
     <Style id="eclipseInner">
       <PolyStyle>
@@ -58,16 +64,20 @@ class KMLTemplate:
         <fill>1</fill>
         <outline>1</outline>
       </PolyStyle>
+      <LineStyle>
+        <color>FF00FF00</color>
+        <width>1</width>
+      </LineStyle>
     </Style>
     <Style id="eclipseTotal">
       <LineStyle>
-        <color>ff0000ff</color>
+        <color>FF0000FF</color>
         <width>2</width>
       </LineStyle>
     </Style>
     <Style id="eclipseAnnular">
       <LineStyle>
-        <color>ff0ff0000</color>
+        <color>FFFF0000</color>
         <width>2</width>
       </LineStyle>
     </Style>
@@ -206,7 +216,7 @@ def make_kml():
 
         path_list = []
         for x in item['path']:
-            # Shorten paths to include only every 5th point
+            # Shorten paths to include only every fifth point
             points = [[approx(p[1]), approx(p[2])] for p in x[1][::5]]
 
             # Make sure we include the final point
@@ -234,7 +244,24 @@ def make_kml():
     # Produce KML files
     kml_template = KMLTemplate()
     for item in json_data:
+        # Write HTML description for this eclipse
+        event_title = "{}, {}".format(item['event_title'], item['event_month'])
+
+        event_description = """
+<div style="font-size: 13pt; text-align: left; white-space: nowrap;">
+<p>
+&copy;&nbsp;2011-2019&nbsp;<a href="https://in-the-sky.org/eclipses">Dominic Ford / In-The-Sky.org</a>
+</p><p>
+Calculated using Dominic Ford's <a href="https://github.com/dcf21/eclipse-simulator">Eclipse Simulator</a>
+<br />
+based on the <a href="https://github.com/dcf21/ephemeris-compute">JPL DE405 ephemeris</a>.
+</p><p>
+Downloaded from <a href="https://in-the-sky.org/eclipses">In-The-Sky.org</a>
+</p>
+</div>
+"""
         kml_body = ""
+
         # Add paths where eclipse is total or annular
         for path in item['path']:
             point_string = generate_point_string(point_list=[point[1:3] for point in path[1]])
@@ -255,10 +282,14 @@ def make_kml():
         # Write KMZ output
         file_stub = os.path.split(item['filename'])[1][:-5]
         filename = os.path.join(out_path, "{}.kmz".format(file_stub))
-        with zipfile.ZipFile(filename, "w") as myzip:
+        with zipfile.ZipFile(filename, "w", zipfile.ZIP_DEFLATED) as myzip:
             kml_filename = "{}.kml".format(file_stub)
             with myzip.open(kml_filename, "w") as f:
-                f.write(kml_template.kml_document.format(body=kml_body).encode('utf-8'))
+                f.write(kml_template.kml_document.format(
+                    title=event_title,
+                    description=event_description,
+                    body=kml_body
+                ).encode('utf-8'))
 
 
 # Do it right away if we're run as a script

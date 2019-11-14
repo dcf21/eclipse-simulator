@@ -22,6 +22,8 @@
 #ifndef SHADOW_CALC_H
 #define SHADOW_CALC_H 1
 
+#include "settings.h"
+
 typedef struct shadow_map {
     double *map;
     double *lat, *lng;  // degrees

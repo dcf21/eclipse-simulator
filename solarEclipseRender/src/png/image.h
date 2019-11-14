@@ -1,4 +1,4 @@
-// render_3d.c
+// image.h
 
 // -------------------------------------------------
 // Copyright 2019 Dominic Ford.
@@ -19,15 +19,41 @@
 // along with EclipseRender.  If not, see <http://www.gnu.org/licenses/>.
 // -------------------------------------------------
 
-#ifndef RENDER_3D_H
-#define RENDER_3D_H 1
+#ifndef IMAGE_H
+#define IMAGE_H 1
 
-#include "map_greatest_eclipse.h"
-#include "settings.h"
-#include "shadow_calc.h"
+/* Variable format used to store images */
 
-void render_3d_eclipse_map(settings *config, double jd, jpeg_ptr earthDay,
-                           const double *pos_sun, const double *pos_earth,
-                           const shadow_map *shadow_map, const eclipse_path_list *eclipse_path);
+typedef struct {
+    int xsize;
+    int ysize;
+    double *data_w;
+    double *data_red;
+    double *data_grn;
+    double *data_blu;
+} image_ptr;
+
+/* Variable format used to image pixels */
+
+typedef struct {
+    double red;
+    double grn;
+    double blu;
+} pixel;
+
+/* Functions defined in image_in.c */
+void image_alloc(image_ptr *out, int x, int y);
+
+void image_dealloc(image_ptr *in);
+
+void image_cp(image_ptr *in, image_ptr *out);
+
+void image_deweight(image_ptr *out);
+
+image_ptr image_get(const char *filename);
+
+/* Functions defined in image_out.c */
+int image_put(const char *output_filename, image_ptr image, int greyscale);
 
 #endif
+

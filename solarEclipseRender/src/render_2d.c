@@ -19,9 +19,19 @@
 // along with EclipseRender.  If not, see <http://www.gnu.org/licenses/>.
 // -------------------------------------------------
 
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 #include <math.h>
-#include <gd.h>
-#include "jpeg_in.h"
+
+#include <cairo/cairo.h>
+#include <cairo/cairo-svg.h>
+#include <cairo/cairo-pdf.h>
+
+#include <gsl/gsl_math.h>
+
+#include "jpeg/jpeg.h"
 
 #include "coreUtils/errorReport.h"
 #include "coreUtils/strConstants.h"
@@ -30,40 +40,10 @@
 
 #include "country_lookup.h"
 #include "map_greatest_eclipse.h"
+#include "rendering.h"
 #include "render_2d.h"
 #include "settings.h"
 #include "shadow_calc.h"
-
-/**
- * drawShadowContours - Draw contours onto a GD image surface, wherever the values in the array <shadow> pass any
- * of the thresholds in the array <contourList>.
- * @param frame - The GD image surface onto which to trace the contours.
- * @param shadow - The array of shadow fractions within each pixel, which we are to draw contours from
- * @param xs - The horizontal pixel size of the GD image
- * @param ys - The vertical pixel size of the GD image
- */
-void drawShadowContours(gdImagePtr frame, const shadow_map *shadow, int xs, int ys) {
-    int x, y, i;
-    double contourList[] = {80, 60, 40, 20, 0.0001, -1};
-
-    for (i = 0; contourList[i] >= 0; i++) {
-        double level = contourList[i] / 100.;
-        int color = (level > 0.01) ? gdTrueColor(200, 200, 0) : gdTrueColor(220, 0, 0);
-        for (y = 1; y < ys - 2; y++)
-            for (x = 1; x < xs - 2; x++) {
-                if (shadow->map[y * xs + x] > level)
-                    if ((shadow->map[(y - 1) * xs + (x)] <= level) || (shadow->map[(y - 1) * xs + (x - 1)] <= level) ||
-                        (shadow->map[(y) * xs + (x - 1)] <= level) || (shadow->map[(y + 1) * xs + (x - 1)] <= level) ||
-                        (shadow->map[(y + 1) * xs + (x)] <= level) || (shadow->map[(y + 1) * xs + (x + 1)] <= level) ||
-                        (shadow->map[(y) * xs + (x + 1)] <= level) || (shadow->map[(y - 1) * xs + (x + 1)] <= level)) {
-                        gdImageSetPixel(frame, x, y, color);
-                        gdImageSetPixel(frame, x + 1, y, color);
-                        gdImageSetPixel(frame, x, y + 1, color);
-                        gdImageSetPixel(frame, x + 1, y + 1, color);
-                    }
-            }
-    }
-}
 
 /**
  * render_2d_eclipse_map - Render a 2D flat snapshot map of the magnitude of a solar eclipse across the world. This is
@@ -80,20 +60,32 @@ void render_2d_eclipse_map(settings *config, double jd, jpeg_ptr earthDay, jpeg_
                            const shadow_map *shadow_map, const eclipse_path_list *eclipse_path) {
     int x, y;
 
-    // Draw flat map of Earth onto this canvas
-    gdImagePtr frame = gdImageCreateTrueColor(config->x_size_2d, config->y_size_2d);
+    // Generate image RGB data
+    const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, config->x_size_2d);
+
+    // Allocate buffer for image data
+    unsigned char *pixel_data = malloc(stride * config->y_size_2d);
+
+    // Horizontally shift map of the world to put the point of greatest eclipse at the centre
+    int x_offset = (int) (config->solar_longitude_at_midpoint * config->x_size_2d / 360);
+    if (x_offset > config->x_size_2d / 2) x_offset -= config->x_size_2d;
+    if (x_offset < -config->x_size_2d / 2) x_offset += config->x_size_2d;
 
     // Loop over all the pixels in the image we are to produce
     for (y = 0; y < config->y_size_2d; y++)
         for (x = 0; x < config->x_size_2d; x++) {
             const int offset = x + y * config->x_size_2d;
 
+            // Work out latitude / longitude of this pixel
+            const double latitude = shadow_map->lat[offset];
+            double longitude = shadow_map->lng[offset];
+
             jpeg_ptr *srcimg_day = &earthDay;
             jpeg_ptr *srcimg_night = &earthNight;
 
             // Fetch colour of day time pixel
-            int p0_day = (int) ((shadow_map->lng[offset] + 180.) * srcimg_day->xsize / 360.);
-            int p1_day = (int) ((90. - shadow_map->lat[offset]) * srcimg_day->ysize / 180.);
+            int p0_day = (int) ((longitude + 180.) * srcimg_day->xsize / 360.);
+            int p1_day = (int) ((90. - latitude) * srcimg_day->ysize / 180.);
             if (p0_day >= srcimg_day->xsize) p0_day -= srcimg_day->xsize;
             if (p1_day >= srcimg_day->ysize) p1_day = srcimg_day->ysize - 1;
             int c0_day = ((int) srcimg_day->data_red[p0_day + p1_day * srcimg_day->xsize]);
@@ -101,8 +93,8 @@ void render_2d_eclipse_map(settings *config, double jd, jpeg_ptr earthDay, jpeg_
             int c2_day = ((int) srcimg_day->data_blu[p0_day + p1_day * srcimg_day->xsize]);
 
             // Fetch colour of night time pixel
-            int p0_night = (int) ((shadow_map->lng[offset] + 180.) * srcimg_night->xsize / 360.);
-            int p1_night = (int) ((90. - shadow_map->lat[offset]) * srcimg_night->ysize / 180.);
+            int p0_night = (int) ((longitude + 180.) * srcimg_night->xsize / 360.);
+            int p1_night = (int) ((90. - latitude) * srcimg_night->ysize / 180.);
             if (p0_night >= srcimg_night->xsize) p0_night -= srcimg_night->xsize;
             if (p1_night >= srcimg_night->ysize) p1_night = srcimg_night->ysize - 1;
             int c0_night = ((int) srcimg_night->data_red[p0_night + p1_night * srcimg_night->xsize]);
@@ -117,25 +109,17 @@ void render_2d_eclipse_map(settings *config, double jd, jpeg_ptr earthDay, jpeg_
 
             int c0, c1, c2;
             if (night_time) {
-                c0 = c0_night * 0.8 + c0_day * 0.2;
-                c1 = c1_night * 0.8 + c1_day * 0.2;
-                c2 = c2_night * 0.8 + c2_day * 0.2;
+                c0 = (int) (c0_night * 0.8 + c0_day * 0.2);
+                c1 = (int) (c1_night * 0.8 + c1_day * 0.2);
+                c2 = (int) (c2_night * 0.8 + c2_day * 0.2);
             } else { // Day time
-                c0 = c0_night * 0.1 + c0_day * 0.9;
-                c1 = c1_night * 0.1 + c1_day * 0.9;
-                c2 = c2_night * 0.1 + c2_day * 0.9;
+                c0 = (int) (c0_night * 0.1 + c0_day * 0.9);
+                c1 = (int) (c1_night * 0.1 + c1_day * 0.9);
+                c2 = (int) (c2_night * 0.1 + c2_day * 0.9);
             }
 
             // Superimpose shadow map over Earth
-            if (shadow > 0.98) {
-                // If this pixel experiences a total eclipse, shade it accordingly
-                c0 = (int) (config->moon_shadow_fade_fraction * c0 +
-                            (1 - config->moon_shadow_fade_fraction) * config->totality_col_r);
-                c1 = (int) (config->moon_shadow_fade_fraction * c1 +
-                            (1 - config->moon_shadow_fade_fraction) * config->totality_col_g);
-                c2 = (int) (config->moon_shadow_fade_fraction * c2 +
-                            (1 - config->moon_shadow_fade_fraction) * config->totality_col_b);
-            } else if (shadow > 0) {
+            if (shadow > 0) {
                 // If this pixel experiences a partial eclipse, shade it accordingly
                 c0 = (int) (config->moon_shadow_fade_fraction * c0 +
                             (1 - config->moon_shadow_fade_fraction) * config->shadow_col_r);
@@ -146,12 +130,71 @@ void render_2d_eclipse_map(settings *config, double jd, jpeg_ptr earthDay, jpeg_
             }
 
             // Set pixel color
-            int color = gdTrueColor(c0, c1, c2);
-            gdImageSetPixel(frame, x, y, color);
+            const int output_offset = ((x - x_offset + config->x_size_2d) % config->x_size_2d) * 4 + y * stride;
+
+            *(uint32_t *) &pixel_data[output_offset] = ((uint32_t) c2 +  // blue
+                                                        ((uint32_t) c1 << (unsigned) 8) +  // green
+                                                        ((uint32_t) c0 << (unsigned) 16) + // red
+                                                        ((uint32_t) 255 << (unsigned) 24)  // alpha
+            );
         }
 
     // Overlay contours of eclipse magnitude on top of the map
-    drawShadowContours(frame, shadow_map, config->x_size_2d, config->y_size_2d);
+    const double contourList[] = {80, 60, 40, 20, 1e-6, -1};
+    int *label_position_x, *label_position_y;
+    static int previous_label_position_x[8]= {-1,-1,-1,-1,-1,-1,-1,-1};
+    static int previous_label_position_y[8]= {-1,-1,-1,-1,-1,-1,-1,-1};
+    shadowContoursLabelPositions(contourList, shadow_map, x_offset,
+                                 config->x_size_2d, config->y_size_2d,
+                                 &label_position_x, &label_position_y,
+                                 previous_label_position_x, previous_label_position_y);
+    drawShadowContours(pixel_data, contourList, shadow_map, label_position_x, label_position_y,
+                       x_offset, stride, config->x_size_2d, config->y_size_2d);
+
+    // Turn bitmap data into a Cairo surface
+    cairo_surface_t *surface = cairo_image_surface_create_for_data(pixel_data, CAIRO_FORMAT_ARGB32,
+                                                                   config->x_size_2d, config->y_size_2d,
+                                                                   stride);
+
+    cairo_t *cairo_draw = cairo_create(surface);
+
+    // Label contours
+    for (int i = 0; contourList[i] >= 0; i++)
+        if (label_position_x[i] >= 0) {
+            const double level = contourList[i];
+            char text[8];
+            sprintf(text, "%.0f%%", level);
+
+            const colour yellow = {255, 255, 0};
+            const colour red = {255, 0, 0};
+            const colour colour_this = (level > 0.01) ? yellow : red;
+
+            chart_label(cairo_draw, colour_this, text, label_position_x[i], label_position_y[i],
+                        0, 0, 13, 1, 0);
+        }
+    memcpy(previous_label_position_x, label_position_x, sizeof(previous_label_position_x));
+    memcpy(previous_label_position_y, label_position_y, sizeof(previous_label_position_y));
+    free(label_position_x);
+    free(label_position_y);
+
+    // Mark the position of central eclipse
+    double lng_central, lat_central;
+    eclipse_position_from_path(eclipse_path, jd, &lng_central, &lat_central);
+
+    if (gsl_finite(lng_central)) {
+        const int cross_size = 4;
+        const int x_centre = ((int) ((lng_central + 180) / 360. * config->x_size_2d - x_offset + config->x_size_2d) %
+                              config->x_size_2d);
+        const int y_centre = (int) ((90 - lat_central) / 180 * config->y_size_2d);
+
+        cairo_set_source_rgb(cairo_draw, 0, 255, 0);
+        cairo_new_path(cairo_draw);
+        cairo_move_to(cairo_draw, x_centre - cross_size, y_centre - cross_size);
+        cairo_line_to(cairo_draw, x_centre + cross_size, y_centre + cross_size);
+        cairo_move_to(cairo_draw, x_centre - cross_size, y_centre + cross_size);
+        cairo_line_to(cairo_draw, x_centre + cross_size, y_centre - cross_size);
+        cairo_stroke(cairo_draw);
+    }
 
     // Look up duration of the eclipse
     int is_total;
@@ -164,82 +207,75 @@ void render_2d_eclipse_map(settings *config, double jd, jpeg_ptr earthDay, jpeg_
                    &year, &month, &day, &hour, &min, &sec, &status, temp_err_string);
 
     // Write the time and date in bottom left corner of the image
-    int brect[8];
-    char scratch[FNAME_LENGTH];
-    gdImageFilledRectangle(frame, 0, config->y_size_2d - 70, 175, config->y_size_2d,
-                           gdTrueColorAlpha(0, 0, 0, (int) (gdAlphaTransparent * 0.5)));
-    sprintf(scratch, "%d %s %d UTC", day, config->month_names[month], year);
-    gdImageStringFT(frame, brect, gdTrueColor(255, 255, 0), config->font_name, 15, 0, 10, config->y_size_2d - 11,
-                    scratch);
-    sprintf(scratch, "%02d:%02d", hour, min);
-    gdImageStringFT(frame, brect, gdTrueColor(255, 255, 0), config->font_name, 24, 0, 28, config->y_size_2d - 38,
-                    scratch);
+    char text[FNAME_LENGTH];
+    colour yellow = {255, 255, 0};
+
+    cairo_set_source_rgba(cairo_draw, 0, 0, 0, 0.5);
+    cairo_rectangle(cairo_draw,
+                    0, config->y_size_2d - 70,
+                    190, 70);
+    cairo_fill(cairo_draw);
+
+    sprintf(text, "%d %s %d UTC", day, config->month_names[month], year);
+    chart_label(cairo_draw, yellow, text, 95, config->y_size_2d - 17, 0, 0, 17, 1, 0);
+
+    sprintf(text, "%02d:%02d", hour, min);
+    chart_label(cairo_draw, yellow, text, 95, config->y_size_2d - 49, 0, 0, 28, 1, 0);
 
     // Write copyright text in bottom right corner of the image
-    sprintf(scratch, "&copy; Dominic Ford 2012-2019");
-    gdImageStringFT(NULL, brect, gdTrueColor(255, 255, 0), config->font_name, 12, 0, 0, 0, scratch);
-    gdImageFilledRectangle(frame, config->x_size_2d - brect[4] - 16, config->y_size_2d - 70, config->x_size_2d,
-                           config->y_size_2d,
-                           gdTrueColorAlpha(0, 0, 0, (int) (gdAlphaTransparent * 0.5)));
-    gdImageStringFT(frame, brect, gdTrueColor(255, 255, 0), config->font_name, 12, 0, config->x_size_2d - brect[4] - 8,
-                    config->y_size_2d - 38,
-                    scratch);
+    cairo_set_source_rgba(cairo_draw, 0, 0, 0, 0.5);
+    cairo_rectangle(cairo_draw,
+                    config->x_size_2d - 240, config->y_size_2d - 66,
+                    240, 66);
+    cairo_fill(cairo_draw);
 
-    sprintf(scratch, "https://in-the-sky.org/");
-    gdImageStringFT(NULL, brect, gdTrueColor(255, 255, 0), config->font_name, 12, 0, 0, 0, scratch);
-    gdImageStringFT(frame, brect, gdTrueColor(255, 255, 0), config->font_name, 12, 0, config->x_size_2d - brect[4] - 8,
-                    config->y_size_2d - 11,
-                    scratch);
+    sprintf(text, "\u00A9 Dominic Ford 2012\u20132019");
+    chart_label(cairo_draw, yellow, text, config->x_size_2d - 12, config->y_size_2d - 44, 1, 0, 14, 1, 0);
+
+    sprintf(text, "https://in-the-sky.org/");
+    chart_label(cairo_draw, yellow, text, config->x_size_2d - 12, config->y_size_2d - 18, 1, 0, 14, 1, 0);
 
     // Write duration in the top left corner of the image
-    sprintf(scratch, "Central duration");
-    gdImageStringFT(NULL, brect, gdTrueColor(255, 255, 0), config->font_name, 13, 0, 0, 0, scratch);
-    gdImageFilledRectangle(frame, 0, 0, brect[4] + 16, 70,
-                           gdTrueColorAlpha(0, 0, 0, (int) (gdAlphaTransparent * 0.5)));
-    gdImageStringFT(frame, brect, gdTrueColor(255, 255, 0), config->font_name, 13, 0, 8, 20, scratch);
+    cairo_set_source_rgba(cairo_draw, 0, 0, 0, 0.5);
+    cairo_rectangle(cairo_draw,
+                    0, 0,
+                    166, 70);
+    cairo_fill(cairo_draw);
+
+    sprintf(text, "Central duration");
+    chart_label(cairo_draw, yellow, text, 83, 20, 0, 0, 15, 1, 0);
 
     if (duration > 0) {
-        sprintf(scratch, is_total ? "Total" : "Annular");
-        gdImageStringFT(NULL, brect, gdTrueColor(255, 255, 0), config->font_name, 13, 0, 0, 0, scratch);
-        gdImageStringFT(frame, brect, gdTrueColor(255, 255, 0), config->font_name, 13, 0, 41 - brect[4] / 2, 52,
-                        scratch);
+        sprintf(text, is_total ? "Total" : "Annular");
+        chart_label(cairo_draw, yellow, text, 45, 50, 0, 0, 15, 1, 0);
 
-        sprintf(scratch, "%dm%02ds", (int) (duration / 60), (int) duration % 60);
-        gdImageStringFT(NULL, brect, gdTrueColor(255, 255, 0), config->font_name, 15, 0, 0, 0, scratch);
-        gdImageStringFT(frame, brect, gdTrueColor(255, 255, 0), config->font_name, 15, 0, 146 - brect[4], 52,
-                        scratch);
+        sprintf(text, "%dm%02ds", (int) (duration / 60), (int) duration % 60);
+        chart_label(cairo_draw, yellow, text, 125, 50, 0, 0, 15, 1, 0);
     } else {
-        gdImageStringFT(frame, brect, gdTrueColor(255, 255, 0), config->font_name, 13, 0, brect[4] / 2, 52,
-                        "&ndash;");
+        sprintf(text, "\u2014");
+        chart_label(cairo_draw, yellow, text, 83, 50, 0, 0, 16, 1, 0);
     }
 
     // Write output image
-    char outfname[FNAME_LENGTH];
-    sprintf(outfname, "%s/frameA%06d.jpg", config->output_dir, config->frame_counter);
-    FILE *f = fopen(outfname, "wb");
-    gdImageJpeg(frame, f, 95);
-    fclose(f);
+    char output_filename[FNAME_LENGTH];
+    sprintf(output_filename, "%s/frameA%06d.png", config->output_dir, config->frame_counter);
+    cairo_surface_write_to_png(surface, output_filename);
 
     // If this frame is at the midpoint of the eclipse we output a special "poster" frame which acts as a teaser image
     // for the animation.
     if (config->frame_counter == config->poster_image_frame) {
-        int brect[8];
-        char scratch[FNAME_LENGTH];
-        sprintf(scratch, "Please wait &ndash; loading...");
-        gdImageStringFT(NULL, brect, gdTrueColor(255, 255, 0), config->font_name, 16, 0, 0, 0, scratch);
-        gdImageStringFT(frame, brect, gdTrueColor(255, 255, 0), config->font_name, 16, 0,
-                        (config->x_size_2d - brect[4]) / 2,
-                        (config->y_size_2d - brect[7]) / 2, scratch);
+        sprintf(text, "Please wait &ndash; loading...");
+        chart_label(cairo_draw, yellow, text, (int) (config->x_size_2d / 2), (int) (config->y_size_2d / 2),
+                    0, 0, 16, 1, 0);
 
         // Write out poster image
-        char outfname[FNAME_LENGTH];
-        sprintf(outfname, "%s/solarEclipseA.jpg", config->output_dir);
-        FILE *f = fopen(outfname, "wb");
-        gdImageJpeg(frame, f, 95);
-        fclose(f);
+        sprintf(output_filename, "%s/solarEclipseA.png", config->output_dir);
+        cairo_surface_write_to_png(surface, output_filename);
     }
 
-    gdImageDestroy(frame);
+    cairo_destroy(cairo_draw);
+    cairo_surface_finish(surface);
+    free(pixel_data);
 }
 
 /**
@@ -247,24 +283,37 @@ void render_2d_eclipse_map(settings *config, double jd, jpeg_ptr earthDay, jpeg_
  * @param config [in] - The settings for this eclipse simulation, including, e.g. the output image size
  * @param earthDay [in] - A JPEG image of the world in daylight
  * @param greatest_shadow [in] - A binary map of the eclipse magnitude across the world
+ * @param eclipse_path [in] - The path of greatest eclipse, with duration at each point
+ * @param format [in] - The graphics output format to write. Options are png, pdf or svg.
  */
-void render_2d_maximum_extent(settings *config, jpeg_ptr earthDay, const shadow_map *greatest_shadow) {
+void render_2d_maximum_extent(settings *config, jpeg_ptr earthDay, const shadow_map *greatest_shadow,
+                              const eclipse_path_list *eclipse_path, const char *format) {
     int x, y;
 
-    // Make map of maximum eclipse extent
-    gdImagePtr frame = gdImageCreateTrueColor(config->x_size_2d, config->y_size_2d);
+    // Generate image RGB data
+    const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, config->x_size_2d);
+
+    // Allocate buffer for image data
+    unsigned char *pixel_data = malloc(stride * config->y_size_2d);
+
+    // Horizontally shift map of the world to put the point of greatest eclipse at the centre
+    int x_offset = (int) (config->solar_longitude_at_midpoint * config->x_size_2d / 360);
+    if (x_offset > config->x_size_2d / 2) x_offset -= config->x_size_2d;
+    if (x_offset < -config->x_size_2d / 2) x_offset += config->x_size_2d;
 
     // Loop over all the pixels in the image we are to produce
     for (y = 0; y < config->y_size_2d; y++)
         for (x = 0; x < config->x_size_2d; x++) {
             // Work out the latitude and longitude of this pixel on the Earth
-            double lat = 90 - (y * 180. / config->y_size_2d);
-            double lng = (x * 360. / config->x_size_2d) + (-180) + 360;
-            while (lng > 180) lng -= 360;
+            double latitude = 90 - (y * 180. / config->y_size_2d);
+            double longitude = (x * 360. / config->x_size_2d) - 180;
+
+            while (longitude < -180) longitude += 360;
+            while (longitude >= 180) longitude -= 360;
 
             // Convert this into a pixel position on the image <earthDay>
-            int p0 = (int) ((lng + 180.) * earthDay.xsize / 360.);
-            int p1 = (int) ((90. - lat) * earthDay.ysize / 180.);
+            int p0 = (int) ((longitude + 180.) * earthDay.xsize / 360.);
+            int p1 = (int) ((90. - latitude) * earthDay.ysize / 180.);
 
             // Make sure longitude wraps sensibly
             if (p0 >= earthDay.xsize) p0 -= earthDay.xsize;
@@ -278,56 +327,195 @@ void render_2d_maximum_extent(settings *config, jpeg_ptr earthDay, const shadow_
             // Look up the maximum eclipse fraction in this pixel
             double shadow = greatest_shadow->map[x + y * config->x_size_2d];
 
-            if (shadow > 0.98) {
-                // If this pixel experiences a total eclipse, shade it accordingly
-                c0 = config->moon_shadow_fade_fraction * c0 +
-                     (1 - config->moon_shadow_fade_fraction) * config->totality_col_r;
-                c1 = config->moon_shadow_fade_fraction * c1 +
-                     (1 - config->moon_shadow_fade_fraction) * config->totality_col_g;
-                c2 = config->moon_shadow_fade_fraction * c2 +
-                     (1 - config->moon_shadow_fade_fraction) * config->totality_col_b;
-            } else if (shadow > 0.001) {
+            if (shadow > 0.001) {
                 // If this pixel experiences a partial eclipse, shade it accordingly
-                c0 = config->moon_shadow_fade_fraction * c0 +
-                     (1 - config->moon_shadow_fade_fraction) * config->shadow_col_r;
-                c1 = config->moon_shadow_fade_fraction * c1 +
-                     (1 - config->moon_shadow_fade_fraction) * config->shadow_col_g;
-                c2 = config->moon_shadow_fade_fraction * c2 +
-                     (1 - config->moon_shadow_fade_fraction) * config->shadow_col_b;
+                c0 = (int) (config->moon_shadow_fade_fraction * c0 +
+                            (1 - config->moon_shadow_fade_fraction) * config->shadow_col_r);
+                c1 = (int) (config->moon_shadow_fade_fraction * c1 +
+                            (1 - config->moon_shadow_fade_fraction) * config->shadow_col_g);
+                c2 = (int) (config->moon_shadow_fade_fraction * c2 +
+                            (1 - config->moon_shadow_fade_fraction) * config->shadow_col_b);
             }
 
             // Set pixel color
-            int color = gdTrueColor(c0, c1, c2);
-            gdImageSetPixel(frame, x, y, color);
+            const int output_offset = ((x - x_offset + config->x_size_2d) % config->x_size_2d) * 4 + y * stride;
+
+            *(uint32_t *) &pixel_data[output_offset] = ((uint32_t) c2 +  // blue
+                                                        ((uint32_t) c1 << (unsigned) 8) +  // green
+                                                        ((uint32_t) c0 << (unsigned) 16) + // red
+                                                        ((uint32_t) 255 << (unsigned) 24)  // alpha
+            );
         }
 
     // Overlay contours of eclipse magnitude on top of the map
-    drawShadowContours(frame, greatest_shadow, config->x_size_2d, config->y_size_2d);
+    const double contourList[] = {80, 60, 40, 20, 1e-6, -1};
+    int *label_position_x, *label_position_y;
+    shadowContoursLabelPositions(contourList, greatest_shadow, x_offset,
+                                 config->x_size_2d, config->y_size_2d,
+                                 &label_position_x, &label_position_y,
+                                 NULL, NULL);
+    drawShadowContours(pixel_data, contourList, greatest_shadow, label_position_x, label_position_y,
+                       x_offset, stride, config->x_size_2d, config->y_size_2d);
 
-    // Write the time and date in bottom corners of the image
-    int brect[8];
-    char scratch[FNAME_LENGTH];
+    // Turn bitmap data into a Cairo surface
+    cairo_surface_t *surface = cairo_image_surface_create_for_data(pixel_data, CAIRO_FORMAT_ARGB32,
+                                                                   config->x_size_2d, config->y_size_2d,
+                                                                   stride);
 
-    sprintf(scratch, "&copy; Dominic Ford 2012-2019");
-    gdImageStringFT(NULL, brect, gdTrueColor(255, 255, 0), config->font_name, 12, 0, 0, 0, scratch);
-    gdImageFilledRectangle(frame, config->x_size_2d - brect[4] - 16, config->y_size_2d - 70, config->x_size_2d,
-                           config->y_size_2d,
-                           gdTrueColorAlpha(0, 0, 0, (int) (gdAlphaTransparent * 0.5)));
-    gdImageStringFT(frame, brect, gdTrueColor(255, 255, 0), config->font_name, 12, 0, config->x_size_2d - brect[4] - 8,
-                    config->y_size_2d - 35, scratch);
+    // Create output surface
+    char output_filename[FNAME_LENGTH];
+    sprintf(output_filename, "%s/maximumEclipse.%s", config->output_dir, format);
+    const double dots_per_inch = 200.;
+    const double points_per_dot = 72 / dots_per_inch;
 
-    sprintf(scratch, "https://in-the-sky.org/");
-    gdImageStringFT(NULL, brect, gdTrueColor(255, 255, 0), config->font_name, 12, 0, 0, 0, scratch);
-    gdImageStringFT(frame, brect, gdTrueColor(255, 255, 0), config->font_name, 12, 0, config->x_size_2d - brect[4] - 8,
-                    config->y_size_2d - 11, scratch);
+    cairo_surface_t *output_surface = NULL;
+    if (strcmp(format, "png") == 0) {
+        output_surface = surface;
+        surface = NULL;
+    } else if (strcmp(format, "pdf") == 0) {
+        output_surface = cairo_pdf_surface_create(output_filename, config->x_size_2d * points_per_dot,
+                                                  config->y_size_2d * points_per_dot);
+    } else if (strcmp(format, "svg") == 0) {
+        output_surface = cairo_svg_surface_create(output_filename, config->x_size_2d * points_per_dot,
+                                                  config->y_size_2d * points_per_dot);
+    }
+
+    // Create drawing context
+    cairo_t *cairo_draw = cairo_create(output_surface);
+
+    // If necessary, paste bitmap image onto vector graphics surface
+    if (surface != NULL) {
+        // We need to do some coordinate transformations in order to display the image at the right scale...
+
+        // Scale our coordinate system so the vector graphics axes match the bitmap graphics axes
+        cairo_scale(cairo_draw, points_per_dot, points_per_dot);
+
+        // Paint PNG image onto destination canvas, where it fills up a space of dimensions width x height
+        cairo_set_source_surface(cairo_draw, surface, 0, 0);
+        cairo_rectangle(cairo_draw, 0, 0, config->x_size_2d, config->y_size_2d);
+        cairo_fill(cairo_draw);
+
+        cairo_set_source_rgb(cairo_draw, 0, 0, 0);
+    }
+
+    // Label contours
+    for (int i = 0; contourList[i] >= 0; i++)
+        if (label_position_x[i] >= 0) {
+            const double level = contourList[i];
+            char text[8];
+            sprintf(text, "%.0f%%", level);
+
+            const colour yellow = {255, 255, 0};
+            const colour red = {255, 0, 0};
+            const colour colour_this = (level > 0.01) ? yellow : red;
+
+            chart_label(cairo_draw, colour_this, text, label_position_x[i], label_position_y[i],
+                        0, 0, 14, 1, 0);
+        }
+    free(label_position_x);
+    free(label_position_y);
+
+    // Draw path of central eclipse
+    cairo_set_source_rgb(cairo_draw, 0, 255, 0);
+    cairo_set_line_width(cairo_draw, 1.4);
+    cairo_new_path(cairo_draw);
+
+    int previous_x = -1;
+    int pen_up = 1;
+    for (int i = 0; i < eclipse_path->path_count; i++) {
+        for (int j = 0; j < eclipse_path->paths[i].point_count; j++) {
+            // Look up the coordinates of this point
+            const double longitude = eclipse_path->paths[i].path[j].longitude * 180 / M_PI;
+            const double latitude = eclipse_path->paths[i].path[j].latitude * 180 / M_PI;
+
+            // Project this point onto the 2D canvas
+            const int y_point = (int) ((90 - latitude) / 180. * config->y_size_2d);
+            int x_point = (int) ((longitude + 180.) / 360 * config->x_size_2d - x_offset);
+
+            while (x_point < 0) x_point += config->x_size_2d;
+            while (x_point >= config->x_size_2d) x_point -= config->x_size_2d;
+
+            // If we have flipped from one side of the screen onto the other, break the line
+            if ((previous_x >= 0) && (abs(x_point - previous_x) > 0.5 * config->x_size_2d)) {
+                pen_up = 1;
+            }
+
+            // Add this point to the line
+            if (pen_up) {
+                cairo_move_to(cairo_draw, x_point, y_point);
+                pen_up = 0;
+            } else {
+                cairo_line_to(cairo_draw, x_point, y_point);
+            }
+            previous_x = x_point;
+        }
+    }
+    cairo_stroke(cairo_draw);
+
+    // Get date components (in UT; not TT)
+    int year, month, day, hour, min, status = 0;
+    double sec;
+    double jd = (config->jd_min + config->jd_max) / 2;
+    inv_julian_day(jd - delta_t(jd) / 86400.,
+                   &year, &month, &day, &hour, &min, &sec, &status, temp_err_string);
+
+    // Write the time and date in bottom left corner of the image
+    char text[FNAME_LENGTH];
+    colour yellow = {255, 255, 0};
+
+    cairo_set_source_rgba(cairo_draw, 0, 0, 0, 0.5);
+    cairo_rectangle(cairo_draw,
+                    0, config->y_size_2d - 95,
+                    190, 95);
+    cairo_fill(cairo_draw);
+
+    sprintf(text, "Greatest Eclipse");
+    chart_label(cairo_draw, yellow, text, 95, config->y_size_2d - 80, 0, 0, 15, 1, 0);
+
+    sprintf(text, "%d %s %d UTC", day, config->month_names[month], year);
+    chart_label(cairo_draw, yellow, text, 95, config->y_size_2d - 17, 0, 0, 17, 1, 0);
+
+    sprintf(text, "%02d:%02d", hour, min);
+    chart_label(cairo_draw, yellow, text, 95, config->y_size_2d - 49, 0, 0, 28, 1, 0);
+
+    // Write copyright text in bottom right corner of the image
+    cairo_set_source_rgba(cairo_draw, 0, 0, 0, 0.5);
+    cairo_rectangle(cairo_draw,
+                    config->x_size_2d - 240, config->y_size_2d - 66,
+                    240, 66);
+    cairo_fill(cairo_draw);
+
+    sprintf(text, "\u00A9 Dominic Ford 2012\u20132019");
+    chart_label(cairo_draw, yellow, text, config->x_size_2d - 12, config->y_size_2d - 44, 1, 0, 14, 1, 0);
+
+    sprintf(text, "https://in-the-sky.org/");
+    chart_label(cairo_draw, yellow, text, config->x_size_2d - 12, config->y_size_2d - 18, 1, 0, 14, 1, 0);
+
+    // Write duration in the top left corner of the image
+    cairo_set_source_rgba(cairo_draw, 0, 0, 0, 0.5);
+    cairo_rectangle(cairo_draw,
+                    0, 0,
+                    166, (eclipse_path->maximum_duration > 0) ? 70 : 35);
+    cairo_fill(cairo_draw);
+
+    sprintf(text, eclipse_path->maximum_duration > 0 ? "Greatest duration" : "Partial eclipse");
+    chart_label(cairo_draw, yellow, text, 83, 20, 0, 0, 15, 1, 0);
+
+    if (eclipse_path->maximum_duration > 0) {
+        sprintf(text, "%dm%02ds", (int) (eclipse_path->maximum_duration / 60),
+                (int) eclipse_path->maximum_duration % 60);
+        chart_label(cairo_draw, yellow, text, 125, 50, 0, 0, 15, 1, 0);
+    }
 
     // Write output image
-    char fname[FNAME_LENGTH];
-    sprintf(fname, "%s/maximumEclipse.jpg", config->output_dir);
-    FILE *f = fopen(fname, "wb");
-    gdImageJpeg(frame, f, 95);
-    fclose(f);
-    gdImageDestroy(frame);
+    if (strcmp(format, "png") == 0) {
+        cairo_surface_write_to_png(output_surface, output_filename);
+    }
+
+    cairo_destroy(cairo_draw);
+    cairo_surface_finish(output_surface);
+    if (surface != NULL) cairo_surface_finish(surface);
+    free(pixel_data);
 }
 
 /**
@@ -341,8 +529,11 @@ void render_2d_eclipse_icon(const country_lookup_handle *cl, const settings *con
                             const shadow_map *greatest_shadow) {
     int x, y;
 
-    // Make an icon map of maximum eclipse extent
-    gdImagePtr frame = gdImageCreateTrueColor(config->x_size_teaser, config->y_size_teaser);
+    // Generate image RGB data
+    const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, config->x_size_teaser);
+
+    // Allocate buffer for image data
+    unsigned char *pixel_data = malloc(stride * config->y_size_teaser);
 
     // Loop over all the pixels in the image we are to produce
     for (y = 0; y < config->y_size_teaser; y++)
@@ -388,15 +579,28 @@ void render_2d_eclipse_icon(const country_lookup_handle *cl, const settings *con
             }
 
             // Set pixel color
-            int color = gdTrueColor(c0, c1, c2);
-            gdImageSetPixel(frame, x, y, color);
+            const int output_offset = x * 4 + y * stride;
+
+            *(uint32_t *) &pixel_data[output_offset] = ((uint32_t) c2 +  // blue
+                                                        ((uint32_t) c1 << (unsigned) 8) +  // green
+                                                        ((uint32_t) c0 << (unsigned) 16) + // red
+                                                        ((uint32_t) 255 << (unsigned) 24)  // alpha
+            );
         }
 
+    // Turn bitmap data into a Cairo surface
+    cairo_surface_t *surface = cairo_image_surface_create_for_data(pixel_data, CAIRO_FORMAT_ARGB32,
+                                                                   config->x_size_teaser, config->y_size_teaser,
+                                                                   stride);
+
+    cairo_t *cairo_draw = cairo_create(surface);
+
     // Write output image
-    char fname[FNAME_LENGTH];
-    sprintf(fname, "%s/solarEclipseC.png", config->output_dir);
-    FILE *f = fopen(fname, "wb");
-    gdImagePng(frame, f);
-    fclose(f);
-    gdImageDestroy(frame);
+    char output_filename[FNAME_LENGTH];
+    sprintf(output_filename, "%s/solarEclipseC.png", config->output_dir);
+    cairo_surface_write_to_png(surface, output_filename);
+
+    cairo_destroy(cairo_draw);
+    cairo_surface_finish(surface);
+    free(pixel_data);
 }

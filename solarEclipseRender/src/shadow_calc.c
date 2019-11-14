@@ -31,6 +31,7 @@
 
 #include "mathsTools/julianDate.h"
 #include "mathsTools/sphericalAst.h"
+#include "projection.h"
 
 /**
  * Return the quantity delta_T at epoch JD (seconds)
@@ -465,51 +466,8 @@ shadow_map *calculate_eclipse_map_3d(const settings *config, double jd, const do
 
     for (y = 0; y < config->y_size_3d; y++)
         for (x = 0; x < config->x_size_3d; x++) {
-            double zn, p_radius;
-
-            // Project point in 3D space where we measure eclipse fraction, measured in Earth radii with z-axis
-            // pointing out of the screen
-
-            // x-axis starts out point horizontally across the screen
-            double xn = -(x - config->x_size_3d / 2.) / config->earth_pixel_radius;
-
-            // y-axis starts out pointing vertically up the screen
-            double yn = -(y - config->y_size_3d / 2.) / config->earth_pixel_radius;
-            double n = gsl_pow_2(xn) + gsl_pow_2(yn);
-
-            // z-axis points out of the screen
-            if (n >= 1) {
-                // This pixel is not on the Earth's surface, so project point above Earth
-                zn = 0;
-                p_radius = sqrt(n);
-
-                // Renormalise (xn,yn,zn) is have unit length
-                xn /= p_radius;
-                yn /= p_radius;
-            } else {
-                // This pixel is on the Earth's surface
-                zn = -sqrt(1 - n);
-                p_radius = 1;
-            }
-
-            // RA - hour angle
-            const double rotang1 = -M_PI / 2 + lng_sun;
-            const double rotang2 = -M_PI / 2 - lat_sun;
-
-            // Tip (y,z) by declination
-            const double x2 = xn;
-            const double y2 = yn * cos(rotang2) + zn * sin(rotang2);
-            const double z2 = -yn * sin(rotang2) + zn * cos(rotang2);
-
-            // Tip (x,y) to get the right central longitude
-            const double xf = x2 * cos(rotang1) - y2 * sin(rotang1);
-            const double yf = x2 * sin(rotang1) + y2 * cos(rotang1);
-            const double zf = z2;
-
-            // Coordinates now orientated with z-axis pointing out of north pole
-            // longitude
-            double lng = atan2(yf, xf) / M_PI * 180;
-            double lat = asin(zf) / M_PI * 180;
+            double lng, lat, p_radius;
+            project_3d(config, x, y, lng_sun, lat_sun,  &lng, &lat, &p_radius);
 
             double shadow = getShadowFraction(lat, lng, jd, p_radius, pos_sun, pos_moon, pos_earth, sidereal_time);
 

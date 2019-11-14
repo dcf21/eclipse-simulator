@@ -26,15 +26,15 @@
 
 extern char temp_err_string[];
 
-void ephem_error(char *msg);
+void logging_error(char *msg);
 
-void ephem_fatal(char *file, int line, char *msg);
+void logging_fatal(char *file, int line, char *msg);
 
-void ephem_warning(char *msg);
+void logging_warning(char *msg);
 
-void ephem_report(char *msg);
+void logging_report(char *msg);
 
-void ephem_log(char *msg);
+void logging_log(char *msg);
 
 void dcffread(void *ptr, size_t size, size_t nmemb, FILE *stream);
 

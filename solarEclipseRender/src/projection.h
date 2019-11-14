@@ -1,4 +1,4 @@
-// country_lookup.h
+// projection.h
 
 // -------------------------------------------------
 // Copyright 2019 Dominic Ford.
@@ -19,35 +19,15 @@
 // along with EclipseRender.  If not, see <http://www.gnu.org/licenses/>.
 // -------------------------------------------------
 
-#ifndef COUNTRY_LOOKUP_H
-#define COUNTRY_LOOKUP_H 1
+#ifndef PROJECTION_H
+#define PROJECTION_H 1
 
 #include "settings.h"
-#include "shadow_calc.h"
-#include "map_greatest_eclipse.h"
 
-typedef struct countryInfo {
-    unsigned char red, grn, blu;
-    double lat, lng, max_eclipse;
-    char name[64];
-} countryInfo;
+void project_3d(const settings *config, int x, int y, double lng_sun, double lat_sun,
+                double *lng_out, double *lat_out, double *p_radius_out);
 
-#define COUNTRYLISTLEN 2100
-
-typedef struct country_lookup_handle {
-    countryInfo countryList[COUNTRYLISTLEN];
-    int worldMapWidth;
-    int worldMapHeight;
-    int *worldMapArray;
-} country_lookup_handle;
-
-country_lookup_handle *country_lookup_init();
-
-void country_lookup_free(country_lookup_handle *cl);
-
-int test_if_land_or_sea(const country_lookup_handle *cl, double lng, double lat);
-
-void country_lookup_max_eclipse(country_lookup_handle *cl, const settings *config, const shadow_map *greatest_shadow,
-                                const eclipse_path_list *eclipse_path);
+void inv_project_3d(const settings *config, int *x_out, int *y_out, double lng_sun, double lat_sun,
+                    double lng, double lat);
 
 #endif

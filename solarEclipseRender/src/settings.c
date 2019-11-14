@@ -46,10 +46,6 @@ settings default_settings() {
     output.shadow_col_g = 16;
     output.shadow_col_b = 16;
 
-    output.totality_col_r = 200;
-    output.totality_col_g = 200;
-    output.totality_col_b = 0;
-
     output.jd_min = 2449483.217363426;
     output.jd_max = 2449483.217365426;
 
@@ -63,8 +59,6 @@ settings default_settings() {
     static const char *monthNames[] = {"x", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov",
                                        "Dec"};
     output.month_names = monthNames;
-
-    strcpy(output.font_name, "/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf");
 
     return output;
 }

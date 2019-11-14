@@ -205,7 +205,7 @@ int test_pixel_in_direction(const objective_function *f, int x_pos, int y_pos, i
     }
 
     // illegal direction
-    ephem_fatal(__FILE__, __LINE__, "Illegal direction");
+    logging_fatal(__FILE__, __LINE__, "Illegal direction");
     exit(1);
 }
 
@@ -327,7 +327,7 @@ void trace_contour(FILE *output, const objective_function *f, double latitude_st
         // Make sure we don't iterate unreasonably long
         iteration++;
         if (iteration > 1e8) {
-            ephem_fatal(__FILE__, __LINE__, "Contour tracing in infinite loop");
+            logging_fatal(__FILE__, __LINE__, "Contour tracing in infinite loop");
         }
 
         // If we're looking at a pixel containing land, we change direction to explore it
@@ -458,7 +458,7 @@ void map_eclipse_contours(const settings *config, const ephemeris *ephemeris,
         // Write output
         char contour_title[FNAME_LENGTH];
         if (level > 0.05) {
-            sprintf(contour_title, "%d%%", (int) (level * 100));
+            sprintf(contour_title, ">%d%% eclipse", (int) (level * 100));
         } else {
             sprintf(contour_title, "Partial eclipse");
         }

@@ -37,7 +37,7 @@
 
 #include "country_lookup.h"
 #include "ephemeris.h"
-#include "jpeg_in.h"
+#include "jpeg/jpeg.h"
 #include "make_binary_map.h"
 #include "map_greatest_eclipse.h"
 #include "map_eclipse_contours.h"
@@ -60,7 +60,7 @@ int main(int argc, const char **argv) {
     jpeg_ptr earthDay, earthNight;
 
     // Initialise sub-modules
-    if (DEBUG) ephem_log("Initialising eclipse renderer.");
+    if (DEBUG) logging_log("Initialising eclipse renderer.");
 
     // Turn off GSL's automatic error handler
     gsl_set_error_handler_off();
@@ -96,7 +96,7 @@ int main(int argc, const char **argv) {
         for (i = 0; i < argc; i++) {
             printf("Error: unparsed argument <%s>\n", *(argv + i));
         }
-        ephem_fatal(__FILE__, __LINE__, "Unparsed arguments");
+        logging_fatal(__FILE__, __LINE__, "Unparsed arguments");
     }
 
     // Create output directory
@@ -107,6 +107,16 @@ int main(int argc, const char **argv) {
     // Create ephemeris for the Sun. Earth and Moon
     ephemeris *ephemeris;
     fetch_ephemeris(&config, &ephemeris);
+
+    // Calculate the latitude and longitude on Earth where the Sun is overhead at the midpoint of the eclipse
+    {
+        const int ephemeris_midpoint = ephemeris->point_count / 2;
+        const double jd_midpoint = ephemeris->jd_start + ephemeris_midpoint * ephemeris->jd_step;
+        const ephemeris_point *p = &ephemeris->data[ephemeris_midpoint];
+        double sidereal_time, lat_sun, lng_sun;
+        calculate_where_sun_overhead(&lat_sun, &lng_sun, &sidereal_time, p->sun_pos, p->earth_pos, jd_midpoint);
+        config.solar_longitude_at_midpoint = lng_sun * 180 / M_PI; // degrees
+    }
 
     // Make data structure to store time lapse maps of eclipse magnitude across the world
     const int binary_snapshot_count = ceil((config.jd_max - config.jd_min) /
@@ -120,11 +130,11 @@ int main(int argc, const char **argv) {
     country_lookup_handle *cl = country_lookup_init();
 
     // Read Earth images
-    if (DEBUG) { ephem_log("Reading Earth images."); }
+    if (DEBUG) { logging_log("Reading Earth images."); }
     earthDay = jpeg_get(SRCDIR "/../earth_day.jpg");
     earthNight = jpeg_get(SRCDIR "/../earth_night.jpg");
     if ((earthDay.xsize <= 0) || (earthNight.xsize <= 0)) {
-        ephem_fatal(__FILE__, __LINE__, "Could not open Earth images.");
+        logging_fatal(__FILE__, __LINE__, "Could not open Earth images.");
         exit(1);
     }
 
@@ -160,12 +170,14 @@ int main(int argc, const char **argv) {
         shadow_map_free(shadow_map_2d);
 
         shadow_map *shadow_map_3d = calculate_eclipse_map_3d(&config, JD, pos_sun, pos_earth, pos_moon);
-        render_3d_eclipse_map(&config, JD, earthDay, shadow_map_3d, paths);
+        render_3d_eclipse_map(&config, JD, earthDay, pos_sun, pos_earth, shadow_map_3d, paths);
         shadow_map_free(shadow_map_3d);
     }
 
     // Make an image mapping the greatest magnitude of the eclipse across a 2D map of the world
-    render_2d_maximum_extent(&config, earthDay, greatest_shadow);
+    render_2d_maximum_extent(&config, earthDay, greatest_shadow, paths, "png");
+    render_2d_maximum_extent(&config, earthDay, greatest_shadow, paths, "svg");
+    render_2d_maximum_extent(&config, earthDay, greatest_shadow, paths, "pdf");
 
     // Make a small teaser image showing where the eclipse is visible
     render_2d_eclipse_icon(cl, &config, greatest_shadow);
@@ -174,7 +186,7 @@ int main(int argc, const char **argv) {
     map_eclipse_contours(&config, ephemeris, paths, &timeSpan);
 
     // Work out the maximum extent of the eclipse by country
-    country_lookup_max_eclipse(cl, &config, greatest_shadow);
+    country_lookup_max_eclipse(cl, &config, greatest_shadow, paths);
 
     // Output a binary file containing a series of snapshots of the eclipse's magnitude across the world
     output_binary_map(&config, ephemeris, binary_eclipse_maps);
@@ -182,19 +194,22 @@ int main(int argc, const char **argv) {
     // Return times when the eclipse begins and ends, in partial and total phases
     // All times written as Julian day numbers, in UT
     const double delta_t_days = delta_t(timeSpan.partial_start) / 86400;
-    printf("%.10f %.10f %.10f %.10f\n",
+    printf("%.10f %.10f %.10f %.10f %.10f %.10f %.10f\n",
            timeSpan.partial_start - delta_t_days,
            timeSpan.partial_end - delta_t_days,
            timeSpan.total_start - delta_t_days,
-           timeSpan.total_end - delta_t_days
-           );
+           timeSpan.total_end - delta_t_days,
+           timeSpan.greatest_eclipse_magnitude,
+           timeSpan.greatest_eclipse_latitude,
+           timeSpan.greatest_eclipse_longitude
+    );
 
     // Clean up and exit
-    if (DEBUG) ephem_log("Freeing data structures.");
+    if (DEBUG) logging_log("Freeing data structures.");
     shadow_map_free(greatest_shadow);
     country_lookup_free(cl);
     jpeg_dealloc(&earthDay);
     jpeg_dealloc(&earthNight);
-    if (DEBUG) ephem_log("Terminating normally.");
+    if (DEBUG) logging_log("Terminating normally.");
     return 0;
 }

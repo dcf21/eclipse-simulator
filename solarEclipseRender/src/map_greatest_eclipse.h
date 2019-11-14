@@ -45,10 +45,13 @@ typedef struct eclipse_path_list {
     eclipse_path paths[MAX_PATH_ITEMS];
     int path_count;
     double latitude_midpoint, longitude_midpoint;
+    double maximum_duration;
 } eclipse_path_list;
 
 double eclipse_duration_from_path(const eclipse_path_list *paths, double jd, int *is_total);
 
 eclipse_path_list *map_greatest_eclipse(const settings *config, const ephemeris *ephemeris);
+
+void eclipse_position_from_path(const eclipse_path_list *paths, double jd, double *lng_out, double *lat_out);
 
 #endif

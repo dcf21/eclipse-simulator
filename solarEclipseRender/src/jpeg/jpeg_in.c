@@ -25,7 +25,7 @@
 #include <gsl/gsl_math.h>
 #include <jpeglib.h>
 
-#include "jpeg_in.h"
+#include "jpeg.h"
 
 //! jpeg_alloc - allocate an jpeg_ptr structure to hold an image of dimensions (x, y)
 //! \param [out] out The jpeg_ptr structure to populate

@@ -189,6 +189,36 @@ double eclipse_duration_from_path(const eclipse_path_list *paths, double jd, int
 }
 
 /**
+ * eclipse_position_from_path - Work out the position of central eclipse, at a given time.
+ * @param paths [in] - The path of the eclipse, as returned by <map_greatest_eclipse>, which includes duration data
+ * @param jd [in] - The time point to query, specified as a Julian day number (TT)
+ * @param lng_out [out] - The longitude of central eclipse, in degrees
+ * @param lat_out [out] - The latitude of central eclipse, in degrees
+ */
+void eclipse_position_from_path(const eclipse_path_list *paths, double jd, double *lng_out, double *lat_out) {
+    for (int i = 0; i < paths->path_count; i++) {
+        const eclipse_path *path = &paths->paths[i];
+        for (int j = 1; j < path->point_count; j++) {
+            const path_point *p0 = &path->path[j - 1];
+            const path_point *p1 = &path->path[j];
+
+            if ((jd >= p0->jd) && (jd <= p1->jd)) {
+                // Weighted linear interpolation
+                const double w0 = p1->jd - jd;
+                const double w1 = jd - p0->jd;
+
+                find_mean_position(p0->longitude, p0->latitude, w0, p1->longitude, p1->latitude, w1, lng_out, lat_out);
+
+                *lng_out *= 180 / M_PI;
+                *lat_out *= 180 / M_PI;
+                return;
+            }
+        }
+    }
+    *lng_out = *lat_out = GSL_NAN;
+}
+
+/**
  * Loop over an ephemeris, producing a text file listing the position of greatest eclipse on the Earth's surface over
  * time. We use a GSL numerical minimiser to find the position of the Earth's surface (oblate spheroid) which is closest
  * to the Sun-Moon line.
@@ -321,7 +351,7 @@ eclipse_path_list *map_greatest_eclipse(const settings *config, const ephemeris 
                 path->jd_end = previous_point_calculated.jd;
                 path->path[path->point_count] = previous_point_calculated;
                 path->point_count++;
-                if (path->point_count >= MAX_PATH_LENGTH) ephem_fatal(__FILE__, __LINE__, "Path too long");
+                if (path->point_count >= MAX_PATH_LENGTH) logging_fatal(__FILE__, __LINE__, "Path too long");
             }
 
             // Break line
@@ -359,7 +389,7 @@ eclipse_path_list *map_greatest_eclipse(const settings *config, const ephemeris 
                 path->jd_end = previous_point_calculated.jd;
                 path->path[path->point_count] = previous_point_calculated;
                 path->point_count++;
-                if (path->point_count >= MAX_PATH_LENGTH) ephem_fatal(__FILE__, __LINE__, "Path too long");
+                if (path->point_count >= MAX_PATH_LENGTH) logging_fatal(__FILE__, __LINE__, "Path too long");
             }
 
             previous_point_written = null_point;
@@ -372,7 +402,7 @@ eclipse_path_list *map_greatest_eclipse(const settings *config, const ephemeris 
         if (!gsl_finite(previous_point_written.jd)) {
             // If previous point was not on Earth's surface, start new line
             paths->path_count++;
-            if (paths->path_count >= MAX_PATH_ITEMS) ephem_fatal(__FILE__, __LINE__, "Path count overflow");
+            if (paths->path_count >= MAX_PATH_ITEMS) logging_fatal(__FILE__, __LINE__, "Path count overflow");
             eclipse_path *path = &paths->paths[paths->path_count - 1];
             path->jd_start = p.JD;
             path->is_total = total_eclipse;
@@ -398,7 +428,7 @@ eclipse_path_list *map_greatest_eclipse(const settings *config, const ephemeris 
             path->jd_end = previous_point_calculated.jd;
             path->path[path->point_count] = previous_point_calculated;
             path->point_count++;
-            if (path->point_count >= MAX_PATH_LENGTH) ephem_fatal(__FILE__, __LINE__, "Path too long");
+            if (path->point_count >= MAX_PATH_LENGTH) logging_fatal(__FILE__, __LINE__, "Path too long");
 
             // Update <previous_point_written>
             previous_point_written.latitude = lat;
@@ -420,12 +450,14 @@ eclipse_path_list *map_greatest_eclipse(const settings *config, const ephemeris 
 
     // Write path out to file
     double maximum_duration = 0;
+    int total_points = 0;
     path_point *previous_point = NULL;
 
     fprintf(f, "{\"paths\":[");
 
     for (int i = 0; i < paths->path_count; i++) {
         eclipse_path *path = &paths->paths[i];
+        total_points += path->point_count;
 
         if (i > 0) fprintf(f, ",");
         fprintf(f, "[%d,[", path->is_total);
@@ -466,10 +498,32 @@ eclipse_path_list *map_greatest_eclipse(const settings *config, const ephemeris 
         fprintf(f, "]]");
     }
 
+    // Find midpoint along path
+    double midpoint_lat = -999, midpoint_lng=-999;
+    const int midpoint_index = total_points / 2;
+    int point_count = 0;
+    for (int i = 0; (i < paths->path_count) && (point_count < midpoint_index); i++) {
+        eclipse_path *path = &paths->paths[i];
+
+        const int index = midpoint_index - point_count;
+        if (index < path->point_count) {
+            midpoint_lat = path->path[index].latitude * 180 / M_PI;
+            midpoint_lng = path->path[index].longitude * 180 / M_PI;
+        }
+
+        point_count += path->point_count;
+    }
+
     // Close output file
-    fprintf(f, "],\n\"path_segments\":%d,\"duration\":%.1f}\n", paths->path_count, maximum_duration);
+    fprintf(f, "],\n");
+    fprintf(f, "\"path_segments\":%d,", paths->path_count);
+    fprintf(f, "\"duration\":%.1f,", maximum_duration);
+    fprintf(f, "\"midpoint_latitude\":%.5f,", midpoint_lat);
+    fprintf(f, "\"midpoint_longitude\":%.5f", midpoint_lng);
+    fprintf(f, "}\n");
     fclose(f);
 
     // Return paths we computed
+    paths->maximum_duration = maximum_duration;
     return paths;
 };

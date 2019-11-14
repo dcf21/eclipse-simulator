@@ -21,6 +21,8 @@
 cmake_minimum_required(VERSION 3.6)
 project(solarEclipseRender)
 
+include_directories(src)
+
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -Wall -std=c99 -DSRCDIR='\"${CMAKE_SOURCE_DIR}/src\"' -DDCFVERSION='\"x\"' -DDEBUG=0 -D MEMDEBUG1=0 -D MEMDEBUG2=0 -D NORISESET=0")
 
 set(SOURCE_FILES
@@ -42,14 +44,20 @@ set(SOURCE_FILES
         src/duration.h
         src/ephemeris.c
         src/ephemeris.h
-        src/jpeg_in.c
-        src/jpeg_in.h
+        src/jpeg/jpeg.h
+        src/jpeg/jpeg_in.c
         src/make_binary_map.c
         src/make_binary_map.h
         src/map_eclipse_contours.c
         src/map_eclipse_contours.h
         src/map_greatest_eclipse.c
         src/map_greatest_eclipse.h
+        src/png/image.h
+        src/png/image_in.c
+        src/projection.c
+        src/projection.h
+        src/rendering.c
+        src/rendering.h
         src/render_2d.c
         src/render_2d.h
         src/render_3d.c
@@ -62,4 +70,4 @@ set(SOURCE_FILES
 
 add_executable(solarEclipseRender ${SOURCE_FILES})
 
-target_link_libraries(solarEclipseRender mysqlclient gsl gslcblas gd png z jpeg freetype m)
+target_link_libraries(solarEclipseRender mysqlclient gsl gslcblas cairo png z jpeg m)

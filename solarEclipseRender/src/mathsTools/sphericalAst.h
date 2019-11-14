@@ -30,5 +30,9 @@ void ra_dec_from_j2000(double ra0, double dec0, double utc_new, double *ra_out, 
 
 void ra_dec_to_j2000(double ra1, double dec1, double utc_old, double *ra_out, double *dec_out);
 
+void find_mean_position(double lng0, double lat0, double weight0,
+                        double lng1, double lat1, double weight1,
+                        double *lng_mean, double *lat_mean);
+
 #endif
 

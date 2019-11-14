@@ -84,48 +84,58 @@ def make_ephemeris(event_key, event_title, event_duration, j_day, year, month, d
 
     # Construct command-line arguments to pass to eclipse-rendering tool
     eclipse_renderer = os.path.join(src_path, "solarEclipseRender/bin/eclipseRender.bin")
-    jd_min = j_day - 3 / 24
-    jd_max = j_day + 3 / 24
+    jd_min = j_day - 3.2 / 24
+    jd_max = j_day + 3.2 / 24
 
     cmd = "{exe} --jd_min {min:.3f} --jd_max {max:.3f} --title \"{title}\" --output {tmp} > {tmp}/stdout". \
         format(exe=eclipse_renderer, min=jd_min, max=jd_max, title=event_title, tmp=tmp)
-    logging.info(cmd)
+    logging.info("Running command: {}".format(cmd))
     time_start = time.time()
     os.system(cmd)
     time_end = time.time()
 
     # Read time that eclipse starts / end
     times = open("{tmp}/stdout".format(tmp=tmp)).read().split()
+
+    if len(times) < 7:
+        logging.error("FAILURE in command: {}".format(cmd))
+        raise RuntimeError("Eclipse simulator failed")
+
     output = {
         "event_key": event_key,
         "partial_start": unix_from_jd(float(times[0])),
         "partial_end": unix_from_jd(float(times[1])),
         "total_start": unix_from_jd(float(times[2])),
-        "total_end": unix_from_jd(float(times[3]))
+        "total_end": unix_from_jd(float(times[3])),
+        "greatest_eclipse_magnitude": float(times[4]),
+        "greatest_eclipse_latitude": float(times[5]),
+        "greatest_eclipse_longitude": float(times[6])
     }
 
     # Convert frames into MP4 video files
     os.system("cd {} ; "
-              "ffmpeg -nostats -loglevel panic -r 10 -i frameA%06d.jpg -codec:v libx264 -crf 28 {}/solar_{}_A.mp4".
+              "ffmpeg -nostats -loglevel panic -r 10 -i frameA%06d.png -codec:v libx264 -crf 28 {}/solar_{}_A.mp4".
               format(tmp, out_path, id2))
 
     os.system("cd {} ; "
-              "ffmpeg -nostats -loglevel panic -r 10 -i frameB%06d.jpg -codec:v libx264 -crf 28 {}/solar_{}_B.mp4".
+              "ffmpeg -nostats -loglevel panic -r 10 -i frameB%06d.png -codec:v libx264 -crf 28 {}/solar_{}_B.mp4".
               format(tmp, out_path, id2))
 
     os.system("cd {} ; "
-              "ffmpeg -nostats -loglevel panic -r 10 -i frameA%06d.jpg -acodec vorbis -vcodec libtheora -q:v 5 "
+              "ffmpeg -nostats -loglevel panic -r 10 -i frameA%06d.png -acodec vorbis -vcodec libtheora -q:v 5 "
               "{}/solar_{}_A.ogg".format(tmp, out_path, id2))
 
     os.system("cd {} ; "
-              "ffmpeg -nostats -loglevel panic -r 10 -i frameB%06d.jpg -acodec vorbis -vcodec libtheora -q:v 5 "
+              "ffmpeg -nostats -loglevel panic -r 10 -i frameB%06d.png -acodec vorbis -vcodec libtheora -q:v 5 "
               "{}/solar_{}_B.ogg".format(tmp, out_path, id2))
 
     # Move images and JSON files to final destination
-    os.system("cd {} ; mv solarEclipseA.jpg {}/solar_{}_A.jpg".format(tmp, out_path, id2))
-    os.system("cd {} ; mv solarEclipseB.jpg {}/solar_{}_B.jpg".format(tmp, out_path, id2))
+    os.system("cd {} ; mv solarEclipseA.png {}/solar_{}_A.png".format(tmp, out_path, id2))
+    os.system("cd {} ; mv solarEclipseB.png {}/solar_{}_B.png".format(tmp, out_path, id2))
     os.system("cd {} ; mv solarEclipseC.png {}/solar_{}_C.png".format(tmp, out_path, id2))
-    os.system("cd {} ; mv maximumEclipse.jpg {}/solar_{}.jpg".format(tmp, out_path, id2))
+    os.system("cd {} ; mv maximumEclipse.png {}/solar_{}.png".format(tmp, out_path, id2))
+    os.system("cd {} ; mv maximumEclipse.pdf {}/solar_{}.pdf".format(tmp, out_path, id2))
+    os.system("cd {} ; mv maximumEclipse.svg {}/solar_{}.svg".format(tmp, out_path, id2))
     os.system("cd {} ; mv maximumEclipse.json {}/solar_{}.json".format(tmp, out_path, id2))
     os.system("cd {} ; mv maximumEclipse.dat {}/solar_{}.dat".format(tmp, out_path, id2))
 
@@ -144,11 +154,16 @@ def make_ephemeris(event_key, event_title, event_duration, j_day, year, month, d
             'event_duration_espenak': event_duration,  # seconds
             'event_duration_ford': path_json['duration'],  # seconds
             'path_segments': path_json['path_segments'],
+            'path_midpoint_latitude': path_json['midpoint_latitude'],
+            'path_midpoint_longitude': path_json['midpoint_longitude'],
             "event_key": event_key,
             "partial_start": int(output['partial_start']),
             "partial_end": int(output['partial_end']),
             "total_start": int(output['total_start']),
             "total_end": int(output['total_end']),
+            "greatest_eclipse_magnitude": output['greatest_eclipse_magnitude'],
+            "greatest_eclipse_latitude": output['greatest_eclipse_latitude'],
+            "greatest_eclipse_longitude": output['greatest_eclipse_longitude'],
             'host': os.uname()[1]
         }, separators=(',', ':')))
 

@@ -133,3 +133,40 @@ void ra_dec_to_j2000(double ra1, double dec1, double utc_old, double *ra_out, do
     *ra_out = ra_new * 12 / M_PI;
     *dec_out = dec_new * 180 / M_PI;
 }
+
+//! find_mean_position - Find the weighted average of two positions on a sphere
+//! \param [in] lng0 - The longitude of the first point (radians)
+//! \param [in] lat0  - The latitude of the first point (radians)
+//! \param [in] weight0  - The weighting of the first point
+//! \param [in] lng1  - The longitude of the second point (radians)
+//! \param [in] lat1  - The latitude of the second point (radians)
+//! \param [in] weight1  - The weighting of the second point
+//! \param [out] lng_mean - The longitude of the midpoint between the input points
+//! \param [out] lat_mean - The latitude of the midpoint between the input points
+
+void find_mean_position(double lng0, double lat0, double weight0,
+                        double lng1, double lat1, double weight1,
+                        double *lng_mean, double *lat_mean) {
+
+    // Convert the first point from spherical polar coordinates to Cartesian coordinates
+    const double x0 = cos(lng0) * cos(lat0) * weight0;
+    const double y0 = sin(lng0) * cos(lat0) * weight0;
+    const double z0 = sin(lat0) * weight0;
+
+    // Convert the second point from spherical polar coordinates to Cartesian coordinates
+    const double x1 = cos(lng1) * cos(lat1) * weight1;
+    const double y1 = sin(lng1) * cos(lat1) * weight1;
+    const double z1 = sin(lat1) * weight1;
+
+// Work out the centroid of the three points in Cartesian space
+    const double x3 = x0 + x1;
+    const double y3 = y0 + y1;
+    const double z3 = z0 + z1;
+
+// Work out the magnitude of the centroid vector
+    const double mag = sqrt(x3 * x3 + y3 * y3 + z3 * z3);
+
+    // Convert the Cartesian coordinates into RA and Dec
+    *lat_mean = asin(z3 / mag);
+    *lng_mean = atan2(y3, x3);
+}

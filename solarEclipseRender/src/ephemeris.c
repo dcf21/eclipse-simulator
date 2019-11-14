@@ -74,11 +74,11 @@ void fetch_ephemeris(const settings *config, ephemeris **output) {
         // Read columns of data
         items_fetched = (int)fread(&x->data[line_counter].sun_pos, sizeof(double), 3, ephemeris_data);
         if (items_fetched == 0) break;
-        if (items_fetched < 3) ephem_fatal(__FILE__,__LINE__, "Too few items");
+        if (items_fetched < 3) logging_fatal(__FILE__, __LINE__, "Too few items");
         items_fetched = (int)fread(&x->data[line_counter].moon_pos, sizeof(double), 3, ephemeris_data);
-        if (items_fetched < 3) ephem_fatal(__FILE__,__LINE__, "Too few items");
+        if (items_fetched < 3) logging_fatal(__FILE__, __LINE__, "Too few items");
         items_fetched = (int)fread(&x->data[line_counter].earth_pos, sizeof(double), 3, ephemeris_data);
-        if (items_fetched < 3) ephem_fatal(__FILE__,__LINE__, "Too few items");
+        if (items_fetched < 3) logging_fatal(__FILE__, __LINE__, "Too few items");
 
         // Increment data point counter
         line_counter++;
@@ -86,7 +86,7 @@ void fetch_ephemeris(const settings *config, ephemeris **output) {
 
     // Throw an error if we got no data
     if (line_counter == 0) {
-        ephem_fatal(__FILE__, __LINE__, "ephemerisCompute returned no data");
+        logging_fatal(__FILE__, __LINE__, "ephemerisCompute returned no data");
         exit(1);
     }
 
@@ -98,7 +98,7 @@ void fetch_ephemeris(const settings *config, ephemeris **output) {
 
     if (DEBUG) {
         sprintf(temp_err_string, "Read list of %d ephemeris points from ephemeris.", line_counter);
-        ephem_log(temp_err_string);
+        logging_log(temp_err_string);
     }
 
     // Return output

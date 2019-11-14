@@ -25,7 +25,7 @@ DATE    = 15/09/2019
 PATHLINK= /
 
 COMPILE = $(CC) -Wall -g -c -I $(CWD)/src `mysql_config --cflags`
-LIBS    = -lgsl -lgslcblas -lgd -lpng -lz -ljpeg -lfreetype -lm
+LIBS    = -lcairo -lgsl -lgslcblas -lpng -lz -ljpeg -lm
 LINK    = $(CC) -Wall -g
 
 OPTIMISATION = -O3 -march=native
@@ -37,9 +37,9 @@ LOCAL_SRCDIR = src
 LOCAL_OBJDIR = obj
 LOCAL_BINDIR = bin
 
-CORE_FILES = argparse/argparse.c coreUtils/asciiDouble.c coreUtils/errorReport.c mathsTools/julianDate.c mathsTools/sphericalAst.c country_lookup.c duration.c ephemeris.c jpeg_in.c make_binary_map.c map_eclipse_contours.c map_greatest_eclipse.c render_2d.c render_3d.c settings.c shadow_calc.c main.c
+CORE_FILES = argparse/argparse.c coreUtils/asciiDouble.c coreUtils/errorReport.c mathsTools/julianDate.c mathsTools/sphericalAst.c country_lookup.c duration.c ephemeris.c jpeg/jpeg_in.c make_binary_map.c map_eclipse_contours.c map_greatest_eclipse.c png/image_in.c projection.c rendering.c render_2d.c render_3d.c settings.c shadow_calc.c main.c
 
-CORE_HEADERS = argparse/argparse.h coreUtils/asciiDouble.h coreUtils/errorReport.h coreUtils/strConstants.h mathsTools/julianDate.h mathsTools/sphericalAst.h constants.h country_lookup.h duration.h ephemeris.h jpeg_in.h make_binary_map.h map_eclipse_contours.h map_greatest_eclipse.h render_2d.h render_3d.h settings.h shadow_calc.h
+CORE_HEADERS = argparse/argparse.h coreUtils/asciiDouble.h coreUtils/errorReport.h coreUtils/strConstants.h mathsTools/julianDate.h mathsTools/sphericalAst.h constants.h country_lookup.h duration.h ephemeris.h jpeg/jpeg.h make_binary_map.h map_eclipse_contours.h map_greatest_eclipse.h png/image.h projection.h rendering.h render_2d.h render_3d.h settings.h shadow_calc.h
 
 CORE_SOURCES          = $(CORE_FILES:%.c=$(LOCAL_SRCDIR)/%.c)
 CORE_OBJECTS          = $(CORE_FILES:%.c=$(LOCAL_OBJDIR)/%.o)
@@ -57,11 +57,11 @@ all: $(LOCAL_BINDIR)/eclipseRender.bin $(LOCAL_BINDIR)/debug/eclipseRender.bin
 #
 
 $(LOCAL_OBJDIR)/%.o:         $(LOCAL_SRCDIR)/%.c $(ALL_HFILES)
-	mkdir -p $(LOCAL_OBJDIR) $(LOCAL_OBJDIR)/argparse $(LOCAL_OBJDIR)/coreUtils $(LOCAL_OBJDIR)/mathsTools
+	mkdir -p $(LOCAL_OBJDIR) $(LOCAL_OBJDIR)/argparse $(LOCAL_OBJDIR)/coreUtils $(LOCAL_OBJDIR)/jpeg $(LOCAL_OBJDIR)/mathsTools $(LOCAL_OBJDIR)/png
 	$(COMPILE) $(OPTIMISATION) $(NODEBUG) $(SWITCHES) $< -o $@
 
 $(LOCAL_OBJDIR)/%.debug.o:   $(LOCAL_SRCDIR)/%.c $(ALL_HFILES)
-	mkdir -p $(LOCAL_OBJDIR) $(LOCAL_OBJDIR)/argparse $(LOCAL_OBJDIR)/coreUtils $(LOCAL_OBJDIR)/mathsTools
+	mkdir -p $(LOCAL_OBJDIR) $(LOCAL_OBJDIR)/argparse $(LOCAL_OBJDIR)/coreUtils $(LOCAL_OBJDIR)/jpeg $(LOCAL_OBJDIR)/mathsTools $(LOCAL_OBJDIR)/png
 	$(COMPILE) $(OPTIMISATION) $(DEBUG)   $(SWITCHES) $< -o $@
 
 #

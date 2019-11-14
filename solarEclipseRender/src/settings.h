@@ -71,13 +71,6 @@ typedef struct settings {
     int shadow_col_b;
 
     /**
-     * Color to use to shade the small dot where a total eclipse is visible
-     */
-    int totality_col_r;
-    int totality_col_g;
-    int totality_col_b;
-
-    /**
      * Time span for eclipse simulation, specified in TT
      */
     double jd_min, jd_max;
@@ -114,11 +107,6 @@ typedef struct settings {
     const char **month_names;
 
     /**
-     * font_name - The font to use to label the eclipse diagrams
-     */
-    char font_name[FNAME_LENGTH];
-
-    /**
      * poster_image_frame - The frame number to use as a poster image for the eclipse videos
      */
     int poster_image_frame;
@@ -127,6 +115,12 @@ typedef struct settings {
      * frame_counter - The frame currently being worked on
      */
     int frame_counter;
+
+    /**
+     * solar_longitude_at_midpoint - The longitude on Earth where the Sun is overhead at the midpoint of the eclipse
+     * (degrees)
+     */
+     double solar_longitude_at_midpoint;
 } settings;
 
 /**

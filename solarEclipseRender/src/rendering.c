@@ -78,7 +78,7 @@ void shadowContoursLabelPositions(const double *contourList, const shadow_map *s
                                   int x_offset, int x_size, int y_size,
                                   int **label_position_x, int **label_position_y,
                                   int *previous_label_position_x, int *previous_label_position_y) {
-    int x, y, i, j;
+    int y, x_output, i, j;
 
     *label_position_x = malloc(256 * sizeof(int));
     *label_position_y = malloc(256 * sizeof(int));
@@ -93,9 +93,9 @@ void shadowContoursLabelPositions(const double *contourList, const shadow_map *s
 
         // Do not place contour labels right at the edges of the image
         for (y = 25; y < y_size - 25; y++)
-            for (x = 25; x < x_size - 25; x++) {
+            for (x_output = 25; x_output < x_size - 25; x_output++) {
+                const int x = X_FIX(x_output + x_offset);
                 if (test_pixel(shadow, x, y, x_size, level)) {
-                    const int x_output = X_FIX(x - x_offset);
 
                     double radius = sqrt(gsl_pow_2(x_output - x_size / 2.) + gsl_pow_2(y - y_size / 2.));
 
@@ -110,7 +110,7 @@ void shadowContoursLabelPositions(const double *contourList, const shadow_map *s
 
                     if (radius < best_radius) {
                         best_radius = radius;
-                        (*label_position_x)[i] = x;
+                        (*label_position_x)[i] = x_output;
                         (*label_position_y)[i] = y;
                     }
                 }
@@ -145,13 +145,13 @@ void drawShadowContours(unsigned char *frame, const double *contourList, const s
         for (y = 1; y < y_size - 1; y++)
             for (x = 0; x < x_size; x++) {
                 if (test_pixel(shadow, x, y, x_size, level)) {
-                    const int x_output = x - x_offset;
+                    const int x_output = X_FIX(x - x_offset);
 
                     int mask_pixel = 0;
                     for (j = 0; contourList[j] >= 0; j++) {
                         const double radius = (gsl_pow_2(x_output - label_position_x[j]) +
                                                gsl_pow_2(y - label_position_y[j]));
-                        const double critical_radius = 15;
+                        const double critical_radius = 16;
                         if (radius < critical_radius * critical_radius) {
                             mask_pixel = 1;
                         }

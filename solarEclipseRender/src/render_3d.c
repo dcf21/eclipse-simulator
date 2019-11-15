@@ -77,7 +77,7 @@ void render_3d_eclipse_map(settings *config, double jd, jpeg_ptr earthDay,
             // Look up eclipse magnitude in this pixel
             double shadow = shadow_map->map[offset];
 
-            unsigned int c0 = 0, c1 = 0, c2 = 0;
+            colour colour_this = {0, 0, 0};
 
             if (!gsl_isnan(shadow_map->lng[offset])) {
                 // Lat & lng of this pixel are finite, which means pixel lies on surface of Earth
@@ -87,28 +87,32 @@ void render_3d_eclipse_map(settings *config, double jd, jpeg_ptr earthDay,
                 if (p0 >= srcimg->xsize) p0 -= srcimg->xsize;
                 if (p1 >= srcimg->ysize) p1 = srcimg->ysize - 1;
 
-                c0 = ((int) srcimg->data_red[p0 + p1 * srcimg->xsize]);
-                c1 = ((int) srcimg->data_grn[p0 + p1 * srcimg->xsize]);
-                c2 = ((int) srcimg->data_blu[p0 + p1 * srcimg->xsize]);
+                const colour colour_earth = {
+                        ((int) srcimg->data_red[p0 + p1 * srcimg->xsize]),
+                        ((int) srcimg->data_grn[p0 + p1 * srcimg->xsize]),
+                        ((int) srcimg->data_blu[p0 + p1 * srcimg->xsize])
+                };
+
+                colour_this = colour_earth;
             }
 
             // Superimpose shadow map over Earth
             if (shadow > 0) {
                 // If this pixel experiences a partial eclipse, shade it accordingly
-                c0 = (int) (config->moon_shadow_fade_fraction * c0 +
-                            (1 - config->moon_shadow_fade_fraction) * config->shadow_col_r);
-                c1 = (int) (config->moon_shadow_fade_fraction * c1 +
-                            (1 - config->moon_shadow_fade_fraction) * config->shadow_col_g);
-                c2 = (int) (config->moon_shadow_fade_fraction * c2 +
-                            (1 - config->moon_shadow_fade_fraction) * config->shadow_col_b);
+                colour_this.red = (int) (config->moon_shadow_fade_fraction * colour_this.red +
+                                         (1 - config->moon_shadow_fade_fraction) * config->shadow_col_r);
+                colour_this.grn = (int) (config->moon_shadow_fade_fraction * colour_this.grn +
+                                         (1 - config->moon_shadow_fade_fraction) * config->shadow_col_g);
+                colour_this.blu = (int) (config->moon_shadow_fade_fraction * colour_this.blu +
+                                         (1 - config->moon_shadow_fade_fraction) * config->shadow_col_b);
             }
 
             // Set pixel color
             const int output_offset = x * 4 + y * stride;
 
-            *(uint32_t *) &pixel_data[output_offset] = ((uint32_t) c2 +  // blue
-                                                        ((uint32_t) c1 << (unsigned) 8) +  // green
-                                                        ((uint32_t) c0 << (unsigned) 16) + // red
+            *(uint32_t *) &pixel_data[output_offset] = ((uint32_t) colour_this.blu +  // blue
+                                                        ((uint32_t) colour_this.grn << (unsigned) 8) +  // green
+                                                        ((uint32_t) colour_this.red << (unsigned) 16) + // red
                                                         ((uint32_t) 255 << (unsigned) 24)  // alpha
             );
         }
@@ -165,7 +169,7 @@ void render_3d_eclipse_map(settings *config, double jd, jpeg_ptr earthDay,
         int x_centre, y_centre;
         inv_project_3d(config, &x_centre, &y_centre, lng_sun, lat_sun, lng_central, lat_central);
 
-        cairo_set_source_rgb(cairo_draw, 0, 255, 0);
+        cairo_set_source_rgb(cairo_draw, 0, 1, 0);
         cairo_new_path(cairo_draw);
         cairo_move_to(cairo_draw, x_centre - cross_size, y_centre - cross_size);
         cairo_line_to(cairo_draw, x_centre + cross_size, y_centre + cross_size);
@@ -242,7 +246,7 @@ void render_3d_eclipse_map(settings *config, double jd, jpeg_ptr earthDay,
     // If this frame is at the midpoint of the eclipse we output a special "poster" frame which acts as a teaser image
     // for the animation.
     if (config->frame_counter == config->poster_image_frame) {
-        sprintf(text, "Please wait &ndash; loading...");
+        sprintf(text, "Please wait \u2013 loading...");
         chart_label(cairo_draw, yellow, text, (int) (config->x_size_3d / 2), (int) (config->y_size_3d / 2),
                     0, 0, 16, 1, 0);
 

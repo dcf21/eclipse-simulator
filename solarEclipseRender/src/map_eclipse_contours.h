@@ -26,7 +26,18 @@
 #include "map_greatest_eclipse.h"
 #include "settings.h"
 
-void map_eclipse_contours(const settings *config, const ephemeris *ephemeris,
-                          const eclipse_path_list *paths, const time_span *eclipse_time_span);
+typedef struct contour_line {
+    double longitude[50000]; // radians
+    double latitude[50000]; // radians
+    int point_count;
+} contour_line;
+
+typedef struct contour_line_list {
+    contour_line line[10];
+    int contour_count;
+} contour_line_list;
+
+contour_line_list *map_eclipse_contours(const settings *config, const ephemeris *ephemeris,
+                                        const eclipse_path_list *paths, const time_span *eclipse_time_span);
 
 #endif

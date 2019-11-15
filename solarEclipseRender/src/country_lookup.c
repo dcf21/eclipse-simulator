@@ -35,6 +35,11 @@
 #include "shadow_calc.h"
 #include "map_greatest_eclipse.h"
 
+//! country_lookup_init - Load externally-created PNG file where the colours of pixels indicate the countries which
+//! lie at any given latitude and longitude.
+//!
+//! \return - A country lookup handle object
+
 country_lookup_handle *country_lookup_init() {
     int j, x, y;
     FILE *f;
@@ -45,16 +50,20 @@ country_lookup_handle *country_lookup_init() {
     // Read world map image
     image_ptr worldMapImg = image_get(SRCDIR "../worldMap/worldMap.png");
 
-    // Read information about countries
+    // Make sure that handle object is empty to begin with
     for (j = 0; j < COUNTRYLISTLEN; j++) {
         cl->countryList[j].red = cl->countryList[j].grn = cl->countryList[j].blu = 0;
         cl->countryList[j].max_eclipse = 0;
     }
+
+    // This text file lists the colours used to shade each country in the PNG file
     f = fopen(SRCDIR "../worldMap/countryList.dat", "r");
     if (f == NULL) {
         logging_fatal(__FILE__, __LINE__, "Could not open list of country info.");
         exit(1);
     }
+
+    // Loop over the contents of the text file, line by line
     while ((!feof(f)) && (!ferror(f))) {
         char *lineptr, line[FNAME_LENGTH];
         file_readline(f, line);
@@ -66,22 +75,28 @@ country_lookup_handle *country_lookup_init() {
             logging_fatal(__FILE__, __LINE__, "Illegal country UID.");
             exit(1);
         }
+
+        // Read the colour used to shade each country
         lineptr = next_word(lineptr);
         cl->countryList[uid].red = (int) get_float(lineptr, NULL);
         lineptr = next_word(lineptr);
         cl->countryList[uid].grn = (int) get_float(lineptr, NULL);
         lineptr = next_word(lineptr);
         cl->countryList[uid].blu = (int) get_float(lineptr, NULL);
+
+        // Read the latitude and longitude of the capital city of each country
         lineptr = next_word(lineptr);
         cl->countryList[uid].lat = get_float(lineptr, NULL);
         lineptr = next_word(lineptr);
         cl->countryList[uid].lng = get_float(lineptr, NULL);
+
+        // Read the name of the country
         lineptr = next_word(lineptr);
         strcpy(cl->countryList[uid].name, lineptr);
     }
     fclose(f);
 
-    // Convert world map image to an array of ints
+    // Convert world map PNG image to an array of ints
     cl->worldMapWidth = worldMapImg.xsize;
     cl->worldMapHeight = worldMapImg.ysize;
     cl->worldMapArray = malloc(cl->worldMapWidth * cl->worldMapHeight * sizeof(int));
@@ -103,22 +118,41 @@ country_lookup_handle *country_lookup_init() {
         }
     image_dealloc(&worldMapImg);
 
+        // Return the country lookup handle object we have just populated
     return cl;
 }
+
+//! country_lookup_free - Free the storage associated with a country lookup object
+//!
+//! @param cl [in] - The country lookup object to free
 
 void country_lookup_free(country_lookup_handle *cl) {
     free(cl->worldMapArray);
     free(cl);
 }
 
-int test_if_land_or_sea(const country_lookup_handle *cl, double lng, double lat) {
-    while (lng > 180) lng -= 360;
-    const int p0 = (int) ((lng + 180.) * cl->worldMapWidth / 360.);
-    const int p1 = (int) ((90. - lat) * cl->worldMapHeight / 180.);
+//! test_if_land_or_sea - Test whether a particular latitude and longitude on Earth lies on land or sea
+//!
+//! \param cl [in] - The country lookup object to use
+//! \param longitude [in] - The longitude to query, in degrees
+//! \param latitude [in] - The latitude to query, in degrees
+//! \return Boolean flag, indicating 1 for land, or 0 for sea.
+
+int test_if_land_or_sea(const country_lookup_handle *cl, double longitude, double latitude) {
+    while (longitude > 180) longitude -= 360;
+    const int p0 = (int) ((longitude + 180.) * cl->worldMapWidth / 360.);
+    const int p1 = (int) ((90. - latitude) * cl->worldMapHeight / 180.);
     const int country = cl->worldMapArray[p1 * cl->worldMapWidth + p0];
 
     return country > 0;
 }
+
+//! country_lookup_max_eclipse - Compile a JSON file of the maximum extent of the eclipse in each country
+//!
+//! \param cl [in] - The country lookup object to use
+//! \param config [in] - The settings for this eclipse simulation
+//! \param greatest_shadow [in] - A binary map of the eclipse magnitude across the world
+//! \param eclipse_path [in] - The path of greatest eclipse, with duration at each point
 
 void country_lookup_max_eclipse(country_lookup_handle *cl, const settings *config, const shadow_map *greatest_shadow,
                                 const eclipse_path_list *eclipse_path) {
@@ -181,9 +215,10 @@ void country_lookup_max_eclipse(country_lookup_handle *cl, const settings *confi
         }
     }
 
-    char fname[FNAME_LENGTH];
-    sprintf(fname, "%s/maximumEclipse.json", config->output_dir);
-    f = fopen(fname, "w");
+    // Start writing JSON output
+    char output_filename[FNAME_LENGTH];
+    sprintf(output_filename, "%s/maximumEclipse.json", config->output_dir);
+    f = fopen(output_filename, "w");
     fprintf(f, "{\"byuid\":{");
     y = 0;
     for (x = 1000; x < 2000; x++)

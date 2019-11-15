@@ -21,6 +21,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <math.h>
 
 #include <gsl/gsl_math.h>
@@ -214,6 +215,7 @@ int test_pixel_in_direction(const objective_function *f, int x_pos, int y_pos, i
  */
 typedef struct line_status {
     FILE *output;
+    contour_line_list *output_line_list;
     double lat_prev, lng_prev;
 } line_status;
 
@@ -248,22 +250,31 @@ void register_point(const objective_function *f, line_status *s, int x, int y) {
     }
 
     if (write_point) {
+        // Write point to JSON file
         if (gsl_finite(s->lng_prev)) fprintf(s->output, ",");
         s->lng_prev = longitude;
         s->lat_prev = latitude;
         fprintf(s->output, "[%.2f,%.2f]", longitude * 180 / M_PI, latitude * 180 / M_PI);
         fflush(s->output);
+
+        // Write point to output <contour_line_list> structure
+        contour_line *line_output = &s->output_line_list->line[s->output_line_list->contour_count];
+        line_output->longitude[line_output->point_count] = longitude;
+        line_output->latitude[line_output->point_count] = latitude;
+        line_output->point_count++;
     }
 }
 
 /**
  * trace_contour - Main entry point for tracing a contour of eclipse magnitude.
- * @param output - The file we are to write the contour to
+ * @param output_stream - The file we are to write the contour to
+ * @param output_line_list - The <contour_line_list> we write the contour paths into
  * @param f [in] - Settings for the contour tracing process
  * @param latitude_start [in] - The latitude, in degrees, of any point which lies inside the contour
  * @param longitude_start [in] - The longitude, in degrees, of any point which lies inside the contour
  */
-void trace_contour(FILE *output, const objective_function *f, double latitude_start, double longitude_start) {
+void trace_contour(FILE *output_stream, contour_line_list *output_line_list,
+                   const objective_function *f, double latitude_start, double longitude_start) {
     int y_scan;
 
     // Pixel starting position
@@ -287,7 +298,7 @@ void trace_contour(FILE *output, const objective_function *f, double latitude_st
 
     // If we couldn't find a starting point inside the contour, return an empty contour
     if (centre_y < -90 / f->contour_tracing_grid_resolution) {
-        fprintf(output, "[]");
+        fprintf(output_stream, "[]");
         return;
     }
 
@@ -301,8 +312,8 @@ void trace_contour(FILE *output, const objective_function *f, double latitude_st
     // printf("Contour start point (%6d, %6d) direction %d\n", start_x, start_y, direction);
 
     // Start tracing the output of a new contour
-    fprintf(output, "[");
-    line_status s = {output, GSL_NAN, GSL_NAN};
+    fprintf(output_stream, "[");
+    line_status s = {output_stream, output_line_list, GSL_NAN, GSL_NAN};
 
     // Start tracing clockwise around this land mass
 
@@ -400,8 +411,10 @@ void trace_contour(FILE *output, const objective_function *f, double latitude_st
     }
 
     // Finish tracing the outline of this contour
-    fprintf(output, "]");
+    fprintf(output_stream, "]");
 
+    // Increment contour counter
+    output_line_list->contour_count++;
 }
 
 /**
@@ -411,14 +424,19 @@ void trace_contour(FILE *output, const objective_function *f, double latitude_st
  * @param paths [in] - The path of this eclipse, as calculated by <map_greatest_eclipse>
  * @param eclipse_time_span [in] - The time span of the partial and total phases of this eclipse, as calculated by
  * <calculate_eclipse_map_2d>
+ * @return - A list of the contours computed
  */
-void map_eclipse_contours(const settings *config, const ephemeris *ephemeris,
-                          const eclipse_path_list *paths, const time_span *eclipse_time_span) {
+contour_line_list *map_eclipse_contours(const settings *config, const ephemeris *ephemeris,
+                                        const eclipse_path_list *paths, const time_span *eclipse_time_span) {
+    // Output structure to write the contours into
+    contour_line_list *output_line_list = malloc(sizeof(contour_line_list));
+    memset(output_line_list, 0, sizeof(contour_line_list));
+
     // Open file to write path of greatest eclipse to
-    char fname[FNAME_LENGTH];
-    sprintf(fname, "%s/maximumEclipseContours.json", config->output_dir);
-    FILE *output = fopen(fname, "wb");
-    fprintf(output, "[");
+    char output_filename[FNAME_LENGTH];
+    sprintf(output_filename, "%s/maximumEclipseContours.json", config->output_dir);
+    FILE *output_stream = fopen(output_filename, "wb");
+    fprintf(output_stream, "[");
     int first = 1;
 
     // Write contours for total and annular eclipses
@@ -439,15 +457,16 @@ void map_eclipse_contours(const settings *config, const ephemeris *ephemeris,
         const double midpoint_longitude = path_segment.path[midpoint].longitude * 180 / M_PI;
 
         // Write output
-        fprintf(output, "%s\n", first ? "" : ",");
+        fprintf(output_stream, "%s\n", first ? "" : ",");
         first = 0;
-        fprintf(output, "[\"%s eclipse\",", path_segment.is_total ? "Total" : "Annular");
-        trace_contour(output, &f, midpoint_latitude, midpoint_longitude);
-        fprintf(output, "]\n");
+        fprintf(output_stream, "[\"%s eclipse\",", path_segment.is_total ? "Total" : "Annular");
+        trace_contour(output_stream, output_line_list, &f, midpoint_latitude, midpoint_longitude);
+        fprintf(output_stream, "]\n");
     }
 
     // Write contours at various eclipse magnitudes
-    for (double level = 1e-8; level < 0.9; level += 0.2) {
+    for (int level_count = 0; level_count < 5; level_count++) {
+        const double level = 1e-8 + 0.2 * level_count;
         objective_function f = {trace_contour_by_eclipse_level, config, ephemeris, eclipse_time_span,
                                 0.025, 40e3, 4, level};
 
@@ -462,14 +481,17 @@ void map_eclipse_contours(const settings *config, const ephemeris *ephemeris,
         } else {
             sprintf(contour_title, "Partial eclipse");
         }
-        fprintf(output, "%s\n", first ? "" : ",");
+        fprintf(output_stream, "%s\n", first ? "" : ",");
         first = 0;
-        fprintf(output, "[\"%s\",", contour_title);
-        trace_contour(output, &f, midpoint_latitude, midpoint_longitude);
-        fprintf(output, "]\n");
+        fprintf(output_stream, "[\"%s\",", contour_title);
+        trace_contour(output_stream, output_line_list, &f, midpoint_latitude, midpoint_longitude);
+        fprintf(output_stream, "]\n");
     }
 
     // Close output file
-    fprintf(output, "]\n");
-    fclose(output);
+    fprintf(output_stream, "]\n");
+    fclose(output_stream);
+
+    // Return list of contours
+    return output_line_list;
 };

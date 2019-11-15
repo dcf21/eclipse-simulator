@@ -26,11 +26,14 @@
 #include "map_greatest_eclipse.h"
 #include "settings.h"
 #include "shadow_calc.h"
+#include "map_eclipse_contours.h"
 
 void render_2d_eclipse_map(settings *config, double jd, jpeg_ptr earthDay, jpeg_ptr earthNight,
                            const shadow_map *shadow_map, const eclipse_path_list *eclipse_path);
 
-void render_2d_maximum_extent(settings *config, jpeg_ptr earthDay, const shadow_map *greatest_shadow,
+void render_2d_maximum_extent(const country_lookup_handle *cl, const settings *config,
+                              const contour_line_list *contours,
+                              const shadow_map *greatest_shadow,
                               const eclipse_path_list *eclipse_path, const char *format);
 
 void render_2d_eclipse_icon(const country_lookup_handle *cl, const settings *config,

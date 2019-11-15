@@ -114,19 +114,19 @@ def make_ephemeris(event_key, event_title, event_duration, j_day, year, month, d
 
     # Convert frames into MP4 video files
     os.system("cd {} ; "
-              "ffmpeg -nostats -loglevel panic -r 10 -i frameA%06d.png -codec:v libx264 -crf 28 {}/solar_{}_A.mp4".
+              "ffmpeg -nostats -loglevel panic -r 10 -i frameA%06d.png -codec:v libx264 -crf 23 {}/solar_{}_A.mp4".
               format(tmp, out_path, id2))
 
     os.system("cd {} ; "
-              "ffmpeg -nostats -loglevel panic -r 10 -i frameB%06d.png -codec:v libx264 -crf 28 {}/solar_{}_B.mp4".
+              "ffmpeg -nostats -loglevel panic -r 10 -i frameB%06d.png -codec:v libx264 -crf 23 {}/solar_{}_B.mp4".
               format(tmp, out_path, id2))
 
     os.system("cd {} ; "
-              "ffmpeg -nostats -loglevel panic -r 10 -i frameA%06d.png -acodec vorbis -vcodec libtheora -q:v 5 "
+              "ffmpeg -nostats -loglevel panic -r 10 -i frameA%06d.png -acodec vorbis -vcodec libtheora -q:v 4 "
               "{}/solar_{}_A.ogg".format(tmp, out_path, id2))
 
     os.system("cd {} ; "
-              "ffmpeg -nostats -loglevel panic -r 10 -i frameB%06d.png -acodec vorbis -vcodec libtheora -q:v 5 "
+              "ffmpeg -nostats -loglevel panic -r 10 -i frameB%06d.png -acodec vorbis -vcodec libtheora -q:v 4 "
               "{}/solar_{}_B.ogg".format(tmp, out_path, id2))
 
     # Move images and JSON files to final destination

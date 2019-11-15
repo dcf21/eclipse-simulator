@@ -174,16 +174,16 @@ int main(int argc, const char **argv) {
         shadow_map_free(shadow_map_3d);
     }
 
-    // Make an image mapping the greatest magnitude of the eclipse across a 2D map of the world
-    render_2d_maximum_extent(&config, earthDay, greatest_shadow, paths, "png");
-    render_2d_maximum_extent(&config, earthDay, greatest_shadow, paths, "svg");
-    render_2d_maximum_extent(&config, earthDay, greatest_shadow, paths, "pdf");
-
     // Make a small teaser image showing where the eclipse is visible
     render_2d_eclipse_icon(cl, &config, greatest_shadow);
 
     // Compute contours of constant eclipse magnitude across the world
-    map_eclipse_contours(&config, ephemeris, paths, &timeSpan);
+    contour_line_list *contours = map_eclipse_contours(&config, ephemeris, paths, &timeSpan);
+
+    // Make images mapping the greatest magnitude of the eclipse across a 2D map of the world
+    render_2d_maximum_extent(cl, &config, contours, greatest_shadow, paths, "png");
+    render_2d_maximum_extent(cl, &config, contours, greatest_shadow, paths, "svg");
+    render_2d_maximum_extent(cl, &config, contours, greatest_shadow, paths, "pdf");
 
     // Work out the maximum extent of the eclipse by country
     country_lookup_max_eclipse(cl, &config, greatest_shadow, paths);
@@ -207,6 +207,7 @@ int main(int argc, const char **argv) {
     // Clean up and exit
     if (DEBUG) logging_log("Freeing data structures.");
     shadow_map_free(greatest_shadow);
+    free(contours);
     country_lookup_free(cl);
     jpeg_dealloc(&earthDay);
     jpeg_dealloc(&earthNight);

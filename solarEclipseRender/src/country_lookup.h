@@ -45,7 +45,7 @@ country_lookup_handle *country_lookup_init();
 
 void country_lookup_free(country_lookup_handle *cl);
 
-int test_if_land_or_sea(const country_lookup_handle *cl, double lng, double lat);
+int test_if_land_or_sea(const country_lookup_handle *cl, double longitude, double latitude);
 
 void country_lookup_max_eclipse(country_lookup_handle *cl, const settings *config, const shadow_map *greatest_shadow,
                                 const eclipse_path_list *eclipse_path);

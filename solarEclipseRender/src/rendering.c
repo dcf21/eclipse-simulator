@@ -28,37 +28,71 @@
 
 #include "rendering.h"
 
+//! X_FIX - Make sure that a horizontal position is within the range 0 -> (x_size-1)
 #define X_FIX(x) (x + x_size) % x_size
 
+//! color_blend - Blend two colours together.
+//! Output (new_colour * fraction + old_colour * (1-fraction) )
+//!
+//! @param new_colour [in] - The new colour to add to the pixel, specified as a colour structure
+//! @param old_colour [in] - The existing colour of the pixel, specified as a Cairo ARGB 24-bit integer
+//! @param fraction [in] - The fraction with which to turn the pixel to the new colour
+//! \return - The new colour, specified as a Cairo ABGR 24-bit integer
+
 uint32_t color_blend(const colour *new_colour, const uint32_t *old_colour, double fraction) {
-    // Cairo's ARGB32 pixel format stores pixels as 32-bit ints, with alpha in most significant byte.
+    // Unpack the new colour
     unsigned int red_1 = (unsigned) new_colour->red;
     unsigned int green_1 = (unsigned) new_colour->grn;
     unsigned int blue_1 = (unsigned) new_colour->blu;
 
+    // Cairo's ARGB32 pixel format stores pixels as 32-bit ints, with alpha in most significant byte.
     unsigned int red_2 = (*old_colour >> (unsigned) 16) & (unsigned) 255;
     unsigned int green_2 = (*old_colour >> (unsigned) 8) & (unsigned) 255;
     unsigned int blue_2 = (*old_colour) & (unsigned) 255;
 
+    // Mix the two colours together
     unsigned int red = (unsigned) (red_1 * fraction + red_2 * (1 - fraction));
     unsigned int green = (unsigned) (green_1 * fraction + green_2 * (1 - fraction));
     unsigned int blue = (unsigned) (blue_1 * fraction + blue_2 * (1 - fraction));
 
+    // Pack into an output structure
     return ((uint32_t) blue +  // blue
             ((uint32_t) green << (unsigned) 8) +  // green
             ((uint32_t) red << (unsigned) 16) + // red
             ((uint32_t) 255 << (unsigned) 24)  // alpha
     );
-
 }
+
+//! set_pixel - Set the colour of a pixel in an array of Cairo ARGB 24-bit integers. Includes alpha blending.
+//!
+//! @param frame - The array of Cairo ARGB 24-bit integers
+//! @param x_size [in] - The horizontal number of pixels in each row
+//! @param stride [in] - The number of bytes separating consecutive rows in <frame>. NB: bytes, not pixels.
+//! @param x [in] - The horizontal position of the pixel to set
+//! @param y [in] - The vertical position of the pixel to set
+//! @param colour [in] - The colour to set the pixel
+//! @param fraction [in] - The opacity of the new pixel colour (0-1)
 
 void set_pixel(unsigned char *frame, int x_size, int stride, int x, int y, const colour *colour, double fraction) {
     const int x_pos = X_FIX(x);
     const int y_pos = y;
     const int offset = x_pos * 4 + y_pos * stride;
+
+    // Blend new colour with old colour
     uint32_t blended_color = color_blend(colour, (const uint32_t *) &frame[offset], fraction);
+
+    // Set new (blended) colour of pixel
     *(uint32_t *) &frame[offset] = blended_color;
 }
+
+//! test_pixel - Test a pixel to see whether it lies on a contour
+//!
+//! @param shadow [in] - An array of the eclipse magnitude in each pixel of the output image
+//! @param x [in] - The horizontal position of the pixel to test
+//! @param y [in] - The vertical position of the pixel to test
+//! @param x_size [in] - The horizontal number of pixels in each row
+//! @param level [in] - The eclipse magnitude (0-1) for which we are drawing a contour
+//! @return  Boolean flag indicating whether this pixel lies on the contour
 
 int test_pixel(const shadow_map *shadow, int x, int y, int x_size, double level) {
     return ((shadow->map[y * x_size + X_FIX(x)] > level) &&
@@ -73,6 +107,23 @@ int test_pixel(const shadow_map *shadow, int x, int y, int x_size, double level)
             )
     );
 }
+
+//! shadowContoursLabelPositions - Work out positions for placing the labels on each of the contours
+//! @param contourList [in] - An array of the eclipse magnitudes (0-100) to draw contours for. Terminate with any
+//!                           negative value.
+//! @param shadow [in] - An array of the eclipse magnitude in each pixel of the output image
+//! @param x_offset [in] - Shift the output diagram horizontally by some number of pixels to place a longitude other
+//!                        than zero at the centre.
+//! @param x_size [in] - The horizontal pixel size of the output image
+//! @param y_size [in] - The vertical pixel size of the output image
+//! @param label_position_x [out] - Output a newly-malloced array of the horizontal positions of each of the contour
+//!                                 labels
+//! @param label_position_y [out] - Output a newly-malloced array of the vertical positions of each of the contour
+//!                                 labels
+//! @param previous_label_position_x [in] - An array of the positions of each contour labels in the previous frame of
+//!                                         a video. Used to avoid too much jitter in the positions.
+//! @param previous_label_position_y [in] - An array of the positions of each contour labels in the previous frame of
+//!                                         a video. Used to avoid too much jitter in the positions.
 
 void shadowContoursLabelPositions(const double *contourList, const shadow_map *shadow,
                                   int x_offset, int x_size, int y_size,
@@ -119,16 +170,16 @@ void shadowContoursLabelPositions(const double *contourList, const shadow_map *s
 }
 
 /**
- * drawShadowContours - Draw contours onto a GD image surface, wherever the values in the array <shadow> pass any
- * of the thresholds in the array <contourList>.
- * @param frame - The image surface onto which to trace the contours.
- * @param shadow - The array of shadow fractions within each pixel, which we are to draw contours from
- * @param x_offset - Shift the output diagram horizontally by some number of pixels to place a longitude other than
- *                   zero at the centre.
- * @param stride - The number of bytes separating consecutive rows in <frame>.
- * @param bold - Boolean flag indicating whether to make contours bold
- * @param x_size - The horizontal pixel size of the output image
- * @param y_size - The vertical pixel size of the output image
+ * drawShadowContours - Draw contours onto an array of Cairo ARGB 24-bit integers, wherever the values in the array
+ * <shadow> pass any of the thresholds in the array <contourList>.
+ * @param frame [in] - The array of Cairo ARGB 24-bit integers onto which to trace the contours.
+ * @param shadow [in] - The array of shadow fractions within each pixel, which we are to draw contours from
+ * @param x_offset [in] - Shift the output diagram horizontally by some number of pixels to place a longitude other than
+ *                        zero at the centre.
+ * @param stride [in] - The number of bytes separating consecutive rows in <frame>.
+ * @param bold [in] - Boolean flag indicating whether to make contours bold
+ * @param x_size [in] - The horizontal pixel size of the output image
+ * @param y_size [in] - The vertical pixel size of the output image
  */
 void drawShadowContours(unsigned char *frame, const double *contourList, const shadow_map *shadow,
                         int *label_position_x, int *label_position_y,
@@ -176,17 +227,17 @@ void drawShadowContours(unsigned char *frame, const double *contourList, const s
 }
 
 //! chart_label - Write a text label onto a cairo page immediately.
-//! \param cairo_draw - The cairo drawing context
-//! \param colour - The colour to use to write the text
-//! \param label - The string of the text label
-//! \param x_canvas - The horizontal position of the label
-//! \param y_canvas - The vertical position of the label
-//! \param h_align - The horizontal alignment of the label
-//! \param v_align - The vertical alignment of the label
-//! \param font_size - Font size of label (pixels)
-//! \param font_bold - Boolean indicating whether to render label in bold
-//! \param font_italic - Boolean indicating whether to render label in italic
-//! \return - None
+//! @param cairo_draw [in] - The cairo drawing context
+//! @param colour [in] - The colour to use to write the text
+//! @param label [in] - The string of the text label
+//! @param x_canvas [in] - The horizontal position of the label
+//! @param y_canvas [in] - The vertical position of the label
+//! @param h_align [in] - The horizontal alignment of the label
+//! @param v_align [in] - The vertical alignment of the label
+//! @param font_size [in] - Font size of label (pixels)
+//! @param font_bold [in] - Boolean indicating whether to render label in bold
+//! @param font_italic [in] - Boolean indicating whether to render label in italic
+//! @return - None
 
 void chart_label(cairo_t *cairo_draw, colour colour, const char *label,
                  double x_canvas, double y_canvas, int h_align, int v_align,
@@ -231,7 +282,7 @@ void chart_label(cairo_t *cairo_draw, colour colour, const char *label,
     }
 
     // Render the text label itself
-    cairo_set_source_rgb(cairo_draw, colour.red, colour.grn, colour.blu);
+    cairo_set_source_rgb(cairo_draw, colour.red / 255., colour.grn / 255., colour.blu / 255.);
     cairo_move_to(cairo_draw, x_canvas, y_canvas);
     cairo_show_text(cairo_draw, label);
 }

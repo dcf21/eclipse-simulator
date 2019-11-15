@@ -31,7 +31,9 @@
 #define MAX_PATH_ITEMS 10
 
 typedef struct path_point {
-    double latitude, longitude, jd, duration;
+    double latitude, longitude; // radians
+    double jd; // TT
+    double duration; // seconds
 } path_point;
 
 typedef struct eclipse_path {

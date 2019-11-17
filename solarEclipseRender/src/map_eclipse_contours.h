@@ -30,6 +30,7 @@ typedef struct contour_line {
     double longitude[50000]; // radians
     double latitude[50000]; // radians
     int point_count;
+    double eclipse_magnitude;
 } contour_line;
 
 typedef struct contour_line_list {

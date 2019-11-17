@@ -292,6 +292,52 @@ void render_2d_eclipse_map(settings *config, double jd, jpeg_ptr earthDay, jpeg_
     free(pixel_data);
 }
 
+void trace_eclipse_contour(cairo_t *cairo_draw, const settings *config, double x_offset,
+                           const contour_line *contour) {
+
+
+    double previous_x = -1, previous_y = -1;
+    int pen_up = 1;
+    for (int j = 0; j < contour->point_count; j++) {
+        // Look up the coordinates of this point
+        const double longitude = contour->longitude[j] * 180 / M_PI;
+        const double latitude = contour->latitude[j] * 180 / M_PI;
+
+        // Project this point onto the 2D canvas
+        const double y_point = (90 - latitude) / 180. * config->y_size_2d;
+        double x_point = (longitude + 180.) / 360 * config->x_size_2d - x_offset;
+
+        while (x_point < 0) x_point += config->x_size_2d;
+        while (x_point >= config->x_size_2d) x_point -= config->x_size_2d;
+
+        // If we have flipped from one side of the screen onto the other, break the line
+        if ((previous_x >= 0) && (fabs(x_point - previous_x) > 0.5 * config->x_size_2d)) {
+            cairo_line_to(cairo_draw,
+                          (previous_x > 0.5 * config->x_size_2d) ? config->x_size_2d : 0,
+                          previous_y);
+            cairo_line_to(cairo_draw,
+                          (previous_x > 0.5 * config->x_size_2d) ? config->x_size_2d : 0,
+                          (previous_y > 0.5 * config->y_size_2d) ? config->y_size_2d : 0);
+            cairo_line_to(cairo_draw,
+                          (previous_x > 0.5 * config->x_size_2d) ? 0 : config->x_size_2d,
+                          (previous_y > 0.5 * config->y_size_2d) ? config->y_size_2d : 0);
+            cairo_line_to(cairo_draw,
+                          (previous_x > 0.5 * config->x_size_2d) ? 0 : config->x_size_2d,
+                          y_point);
+        }
+
+        // Add this point to the line
+        if (pen_up) {
+            cairo_move_to(cairo_draw, x_point, y_point);
+            pen_up = 0;
+        } else {
+            cairo_line_to(cairo_draw, x_point, y_point);
+        }
+        previous_x = x_point;
+        previous_y = y_point;
+    }
+}
+
 /**
  * render_2d_maximum_extent - Render a flat 2D world map of the maximum extent of the eclipse
  * @param cl [in] - Data structure used to look up which country any given (lat,lng) is within
@@ -460,85 +506,48 @@ void render_2d_maximum_extent(const country_lookup_handle *cl, const settings *c
         cairo_stroke(cairo_draw);
     }
 
-    // Draw eclipse contours
-    for (int counter = -1; counter < contours->contour_count; counter++) {
-        const int index = (counter > 0) ? counter : 0;
+    // Shade eclipse contours
+    cairo_save(cairo_draw);
+    cairo_set_fill_rule(cairo_draw, CAIRO_FILL_RULE_EVEN_ODD);
+    cairo_set_source_rgba(cairo_draw, 0, 0, 0, 0.15);
+    cairo_new_path(cairo_draw);
+    for (int index = 0; index < contours->contour_count; index++) {
+        cairo_new_sub_path(cairo_draw);
+        trace_eclipse_contour(cairo_draw, config, x_offset, &contours->line[index]);
+        cairo_close_path(cairo_draw);
+    }
+    cairo_fill(cairo_draw);
 
-        // Make clipping region around contour labels. Do not clip run when counter=-1, when we fill the outermost
-        // contour.
-        cairo_save(cairo_draw);
-        cairo_set_fill_rule(cairo_draw, CAIRO_FILL_RULE_EVEN_ODD);
-        if (counter >= 0) {
-            cairo_new_path(cairo_draw);
-            for (int i = 0; contourList[i] >= 0; i++)
-                if (label_position_x[i] >= 0) {
-                    cairo_new_sub_path(cairo_draw);
-                    cairo_arc(cairo_draw, label_position_x[i], label_position_y[i], 18, 0, 2 * M_PI);
-                }
-            // We want to clip outside the circles where the labels are, so add an extra path around the outside of plot
+    // Make clipping region around contour labels before stroking the lines
+    cairo_new_path(cairo_draw);
+    for (int i = 0; contourList[i] >= 0; i++)
+        if (label_position_x[i] >= 0) {
             cairo_new_sub_path(cairo_draw);
-            cairo_rectangle(cairo_draw, 0, 0, config->x_size_2d, config->y_size_2d);
-            cairo_clip(cairo_draw);
+            cairo_arc(cairo_draw, label_position_x[i], label_position_y[i], 18, 0, 2 * M_PI);
         }
+    // We want to clip outside the circles where the labels are, so add an extra path around the outside of plot
+    cairo_new_sub_path(cairo_draw);
+    cairo_rectangle(cairo_draw, 0, 0, config->x_size_2d, config->y_size_2d);
+    cairo_clip(cairo_draw);
+
+    // Draw eclipse contours
+    for (int index = 0; index < contours->contour_count; index++) {
+        const contour_line *contour = &contours->line[index];
 
         // Set colour and line width for this contour
         cairo_set_source_rgb(cairo_draw, 0, 0, 0);
-        cairo_set_line_width(cairo_draw, (index == 0) ? 2 : 1);
+        cairo_set_line_width(cairo_draw, (contour->eclipse_magnitude > 0.01) ? 1 : 2);
         cairo_new_path(cairo_draw);
 
-        double previous_x = -1, previous_y = -1;
-        int pen_up = 1;
-        for (int j = 0; j < contours->line[index].point_count; j++) {
-            // Look up the coordinates of this point
-            const double longitude = contours->line[index].longitude[j] * 180 / M_PI;
-            const double latitude = contours->line[index].latitude[j] * 180 / M_PI;
-
-            // Project this point onto the 2D canvas
-            const double y_point = (90 - latitude) / 180. * config->y_size_2d;
-            double x_point = (longitude + 180.) / 360 * config->x_size_2d - x_offset;
-
-            while (x_point < 0) x_point += config->x_size_2d;
-            while (x_point >= config->x_size_2d) x_point -= config->x_size_2d;
-
-            // If we have flipped from one side of the screen onto the other, break the line
-            if ((previous_x >= 0) && (fabs(x_point - previous_x) > 0.5 * config->x_size_2d)) {
-                cairo_line_to(cairo_draw,
-                              (previous_x > 0.5 * config->x_size_2d) ? config->x_size_2d : 0,
-                              previous_y);
-                cairo_line_to(cairo_draw,
-                              (previous_x > 0.5 * config->x_size_2d) ? config->x_size_2d : 0,
-                              (previous_y > 0.5 * config->y_size_2d) ? config->y_size_2d : 0);
-                cairo_line_to(cairo_draw,
-                              (previous_x > 0.5 * config->x_size_2d) ? 0 : config->x_size_2d,
-                              (previous_y > 0.5 * config->y_size_2d) ? config->y_size_2d : 0);
-                cairo_line_to(cairo_draw,
-                              (previous_x > 0.5 * config->x_size_2d) ? 0 : config->x_size_2d,
-                              y_point);
-            }
-
-            // Add this point to the line
-            if (pen_up) {
-                cairo_move_to(cairo_draw, x_point, y_point);
-                pen_up = 0;
-            } else {
-                cairo_line_to(cairo_draw, x_point, y_point);
-            }
-            previous_x = x_point;
-            previous_y = y_point;
-        }
+        trace_eclipse_contour(cairo_draw, config, x_offset, contour);
 
         // Close path
         cairo_close_path(cairo_draw);
 
-        // Either fill or stroke path
-        if (counter < 0) {
-            cairo_set_source_rgba(cairo_draw, 0, 0, 0, 0.25);
-            cairo_fill(cairo_draw);
-        } else {
-            cairo_stroke(cairo_draw);
-        }
-        cairo_restore(cairo_draw);
+        // Stroke path
+        cairo_stroke(cairo_draw);
     }
+    cairo_restore(cairo_draw);
 
     // Get date components (in UT; not TT)
     int year, month, day, hour, min, status = 0;
@@ -667,30 +676,29 @@ void render_2d_eclipse_icon(const country_lookup_handle *cl, const settings *con
 
             // Work out color of this pixel
             colour colour_this = {0, 0, 0};
-            const double fade = 0.75; // Fraction by which to darken un-eclipsed pixels
 
             if (point_within_eclipse && (country > 0)) {
 
                 // Land, with eclipse
-                const colour colour_eclipsed_land = {188, 205, 173};
+                const colour colour_eclipsed_land = {150, 230, 150};
                 colour_this = colour_eclipsed_land;
 
             } else if ((!point_within_eclipse) && (country > 0)) {
 
                 // Land, without eclipse
-                const colour colour_uneclipsed_land = {188 * fade, 205 * fade, 173 * fade};
+                const colour colour_uneclipsed_land = {113, 173, 113};
                 colour_this = colour_uneclipsed_land;
 
             } else if (point_within_eclipse && (country == 0)) {
 
                 // Sea, with eclipse
-                const colour colour_eclipsed_sea = {139, 189, 224};
+                const colour colour_eclipsed_sea = {160, 160, 255};
                 colour_this = colour_eclipsed_sea;
 
             } else if ((!point_within_eclipse) && (country == 0)) {
 
                 // Sea, without eclipse
-                const colour colour_uneclipsed_sea = {139 * fade, 189 * fade, 224 * fade};
+                const colour colour_uneclipsed_sea = {120, 120, 192};
                 colour_this = colour_uneclipsed_sea;
 
             }

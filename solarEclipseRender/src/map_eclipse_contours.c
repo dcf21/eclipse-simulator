@@ -261,6 +261,7 @@ void register_point(const objective_function *f, line_status *s, int x, int y) {
         contour_line *line_output = &s->output_line_list->line[s->output_line_list->contour_count];
         line_output->longitude[line_output->point_count] = longitude;
         line_output->latitude[line_output->point_count] = latitude;
+        line_output->eclipse_magnitude = f->contour_level;
         line_output->point_count++;
     }
 }

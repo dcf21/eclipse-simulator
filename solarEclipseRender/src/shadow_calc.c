@@ -299,6 +299,11 @@ shadow_map *allocate_shadow_map(int x_size, int y_size) {
     output->lat = (double *) calloc(x_size * y_size, sizeof(double));
     output->lng = (double *) calloc(x_size * y_size, sizeof(double));
 
+    output->jd_partial_start = (double *) calloc(x_size * y_size, sizeof(double));
+    output->jd_total_start = (double *) calloc(x_size * y_size, sizeof(double));
+    output->jd_total_end = (double *) calloc(x_size * y_size, sizeof(double));
+    output->jd_partial_end = (double *) calloc(x_size * y_size, sizeof(double));
+
     return output;
 }
 
@@ -311,6 +316,10 @@ void shadow_map_free(shadow_map *item) {
     free(item->map);
     free(item->lat);
     free(item->lng);
+    free(item->jd_partial_start);
+    free(item->jd_total_start);
+    free(item->jd_total_end);
+    free(item->jd_partial_end);
     free(item);
 };
 
@@ -411,6 +420,7 @@ shadow_map *calculate_eclipse_map_2d(const settings *config,
             if (shadow > greatest_shadow->map[offset]) {
                 greatest_shadow->map[offset] = shadow;
 
+                // Update the output structure which details the magnitude and place where greatest eclipse occurs
                 if (shadow > span_output->greatest_eclipse_magnitude) {
                     span_output->greatest_eclipse_magnitude = shadow;  // In range 0-1
                     span_output->greatest_eclipse_latitude = lat;  // degrees
@@ -420,6 +430,16 @@ shadow_map *calculate_eclipse_map_2d(const settings *config,
 
             // Keep track of the earliest and latest times when any partial eclipse is visible
             if (shadow > 0) {
+
+                // Update time span of partial eclipse in this pixel
+                if (greatest_shadow->jd_partial_start[offset] == 0) {
+                    greatest_shadow->jd_partial_start[offset] = jd;
+                }
+
+                // Update time span of partial eclipse in this pixel
+                greatest_shadow->jd_partial_end[offset] = jd;
+
+                // Update global record of time span of partial eclipse
                 if ((span_output->partial_start <= 0) || (span_output->partial_start > jd)) {
                     span_output->partial_start = jd;
                 }
@@ -429,7 +449,16 @@ shadow_map *calculate_eclipse_map_2d(const settings *config,
             }
 
             // Keep track of the earliest and latest times when any total (or annular) eclipse is visible
-            if (shadow > 0.98) {
+            if (shadow > 0.999) {
+                // Update time span of total eclipse in this pixel
+                if (greatest_shadow->jd_total_start[offset] == 0) {
+                    greatest_shadow->jd_total_start[offset] = jd;
+                }
+
+                // Update time span of total eclipse in this pixel
+                greatest_shadow->jd_total_end[offset] = jd;
+
+                // Update global record of time span of total eclipse
                 if ((span_output->total_start <= 0) || (span_output->total_start > jd)) {
                     span_output->total_start = jd;
                 }
@@ -467,7 +496,7 @@ shadow_map *calculate_eclipse_map_3d(const settings *config, double jd, const do
     for (y = 0; y < config->y_size_3d; y++)
         for (x = 0; x < config->x_size_3d; x++) {
             double lng, lat, p_radius;
-            project_3d(config, x, y, lng_sun, lat_sun,  &lng, &lat, &p_radius);
+            project_3d(config, x, y, lng_sun, lat_sun, &lng, &lat, &p_radius);
 
             double shadow = getShadowFraction(lat, lng, jd, p_radius, pos_sun, pos_moon, pos_earth, sidereal_time);
 

@@ -149,7 +149,7 @@ int main(int argc, const char **argv) {
     config.poster_image_frame = ephemeris->point_count / video_ephemeris_stride / 2;
 
     // Work out the path of greatest eclipse across the world
-    eclipse_path_list *paths = map_greatest_eclipse(&config, ephemeris);
+    eclipse_path_list *paths = map_greatest_eclipse(&config, ephemeris, &timeSpan);
     // exit(0);
 
     // Loop over video frames

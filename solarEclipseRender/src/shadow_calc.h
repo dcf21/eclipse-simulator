@@ -27,6 +27,7 @@
 typedef struct shadow_map {
     double *map;
     double *lat, *lng;  // degrees
+    double *jd_partial_start, *jd_total_start, *jd_total_end, *jd_partial_end;  // JD; TT
 } shadow_map;
 
 double delta_t(double JD);

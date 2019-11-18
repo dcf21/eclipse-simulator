@@ -52,7 +52,7 @@ typedef struct eclipse_path_list {
 
 double eclipse_duration_from_path(const eclipse_path_list *paths, double jd, int *is_total);
 
-eclipse_path_list *map_greatest_eclipse(const settings *config, const ephemeris *ephemeris);
+eclipse_path_list *map_greatest_eclipse(const settings *config, const ephemeris *ephemeris, time_span *span_output);
 
 void eclipse_position_from_path(const eclipse_path_list *paths, double jd, double *lng_out, double *lat_out);
 

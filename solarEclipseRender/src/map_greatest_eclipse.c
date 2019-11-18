@@ -224,9 +224,10 @@ void eclipse_position_from_path(const eclipse_path_list *paths, double jd, doubl
  * to the Sun-Moon line.
  * @param config [in] - settings
  * @param ephemeris [in] - an ephemeris computed using <ephemerisCompute>
+ * @param span_output [out] - Structure containing the start and end times of the partial and total/annular eclipses
  * @return A list of the path segments of total and/or annular periods in this eclipse
  */
-eclipse_path_list *map_greatest_eclipse(const settings *config, const ephemeris *ephemeris) {
+eclipse_path_list *map_greatest_eclipse(const settings *config, const ephemeris *ephemeris, time_span *span_output) {
     // Open file to write path of greatest eclipse to
     char fname[FNAME_LENGTH];
     sprintf(fname, "%s/maximumEclipsePath.json", config->output_dir);
@@ -367,6 +368,14 @@ eclipse_path_list *map_greatest_eclipse(const settings *config, const ephemeris 
             continue;
         }
 
+        // Keep track of the earliest and latest times when any total (or annular) eclipse is visible
+        if ((span_output->total_start <= 0) || (span_output->total_start > p.JD)) {
+            span_output->total_start = p.JD;
+        }
+        if ((span_output->total_end <= 0) || (span_output->total_end < p.JD)) {
+            span_output->total_end = p.JD;
+        }
+
         // Project point into Cartesian coordinates
         double pos[3], p0[3], p1[3];
         earthTopocentricPositionICRF(pos, lat * 180 / M_PI, lng * 180 / M_PI, 1,
@@ -499,7 +508,7 @@ eclipse_path_list *map_greatest_eclipse(const settings *config, const ephemeris 
     }
 
     // Find midpoint along path
-    double midpoint_lat = -999, midpoint_lng=-999;
+    double midpoint_lat = -999, midpoint_lng = -999;
     const int midpoint_index = total_points / 2;
     int point_count = 0;
     for (int i = 0; (i < paths->path_count) && (point_count < midpoint_index); i++) {

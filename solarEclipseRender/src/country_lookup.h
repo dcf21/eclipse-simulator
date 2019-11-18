@@ -28,8 +28,12 @@
 
 typedef struct countryInfo {
     unsigned char red, grn, blu;
-    double lat, lng, max_eclipse;
+    double lat, lng;
     char name[64];
+
+    // Fields populated with information about eclipse visibility
+    double max_eclipse;
+    double jd_partial_start, jd_total_start, jd_total_end, jd_partial_end;  // JD; TT
 } countryInfo;
 
 #define COUNTRYLISTLEN 2100

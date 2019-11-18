@@ -29,6 +29,7 @@
 #include "coreUtils/errorReport.h"
 
 #include "png/image.h"
+#include "mathsTools/julianDate.h"
 
 #include "country_lookup.h"
 #include "settings.h"
@@ -53,7 +54,12 @@ country_lookup_handle *country_lookup_init() {
     // Make sure that handle object is empty to begin with
     for (j = 0; j < COUNTRYLISTLEN; j++) {
         cl->countryList[j].red = cl->countryList[j].grn = cl->countryList[j].blu = 0;
-        cl->countryList[j].max_eclipse = 0;
+
+        cl->countryList[j].max_eclipse =
+        cl->countryList[j].jd_partial_start =
+        cl->countryList[j].jd_total_start =
+        cl->countryList[j].jd_total_end =
+        cl->countryList[j].jd_partial_end = 0;
     }
 
     // This text file lists the colours used to shade each country in the PNG file
@@ -104,9 +110,9 @@ country_lookup_handle *country_lookup_init() {
     for (y = 0; y < cl->worldMapHeight; y++)
         for (x = 0; x < cl->worldMapWidth; x++) {
             const int offset = x + y * worldMapImg.xsize;
-            const unsigned char red = (unsigned char)worldMapImg.data_red[offset];
-            const unsigned char grn = (unsigned char)worldMapImg.data_grn[offset];
-            const unsigned char blu = (unsigned char)worldMapImg.data_blu[offset];
+            const unsigned char red = (unsigned char) worldMapImg.data_red[offset];
+            const unsigned char grn = (unsigned char) worldMapImg.data_grn[offset];
+            const unsigned char blu = (unsigned char) worldMapImg.data_blu[offset];
             cl->worldMapArray[y * cl->worldMapWidth + x] = 0;
             for (j = 1000; j < COUNTRYLISTLEN; j++)
                 if (red || grn || blu)
@@ -118,7 +124,7 @@ country_lookup_handle *country_lookup_init() {
         }
     image_dealloc(&worldMapImg);
 
-        // Return the country lookup handle object we have just populated
+    // Return the country lookup handle object we have just populated
     return cl;
 }
 
@@ -171,21 +177,61 @@ void country_lookup_max_eclipse(country_lookup_handle *cl, const settings *confi
             if (p0 >= config->x_size_2d) p0 -= config->x_size_2d;
             if (p0 < 0) p0 += config->x_size_2d;
             if (p1 >= config->y_size_2d) p1 = config->y_size_2d - 1;
-            double shadow = greatest_shadow->map[p0 + p1 * config->x_size_2d];
+
+            const int offset = p0 + p1 * config->x_size_2d;
+            double shadow = greatest_shadow->map[offset];
             cl->countryList[x].max_eclipse = shadow;
+            cl->countryList[x].jd_partial_start = greatest_shadow->jd_partial_start[offset];
+            cl->countryList[x].jd_total_start = greatest_shadow->jd_total_start[offset];
+            cl->countryList[x].jd_total_end = greatest_shadow->jd_total_end[offset];
+            cl->countryList[x].jd_partial_end = greatest_shadow->jd_partial_end[offset];
         }
 
     // Loop over the pixels in the 2D bitmap map of the greatest extent of the eclipse, noting the greatest value
     // within each country
     for (y = 0; y < config->y_size_2d; y++)
         for (x = 0; x < config->x_size_2d; x++) {
-            double shadow = greatest_shadow->map[x + y * config->x_size_2d];
+            const int offset = x + y * config->x_size_2d;
+            double shadow = greatest_shadow->map[offset];
             if (shadow > 0) {
                 const int p0 = (int) (((double) x) / config->x_size_2d * cl->worldMapWidth);
                 const int p1 = (int) (((double) y) / config->y_size_2d * cl->worldMapHeight);
                 const int country = cl->worldMapArray[p1 * cl->worldMapWidth + p0];
-                if ((country > 0) && (cl->countryList[country].max_eclipse < shadow))
-                    cl->countryList[country].max_eclipse = shadow;
+
+                // Update maximum magnitude of eclipse in this country
+                if (country > 0) {
+                    if (cl->countryList[country].max_eclipse < shadow) {
+                        cl->countryList[country].max_eclipse = shadow;
+                    }
+
+                    // Update earliest time of partial eclipse in this country
+                    if ((greatest_shadow->jd_partial_start[offset] > 0) &&
+                        ((cl->countryList[country].jd_partial_start == 0) ||
+                         (greatest_shadow->jd_partial_start[offset] < cl->countryList[country].jd_partial_start))) {
+                        cl->countryList[country].jd_partial_start = greatest_shadow->jd_partial_start[offset];
+                    }
+
+                    // Update earliest time of total eclipse in this country
+                    if ((greatest_shadow->jd_total_start[offset] > 0) &&
+                        ((cl->countryList[country].jd_total_start == 0) ||
+                         (greatest_shadow->jd_total_start[offset] < cl->countryList[country].jd_total_start))) {
+                        cl->countryList[country].jd_total_start = greatest_shadow->jd_total_start[offset];
+                    }
+
+                    // Update latest time of total eclipse in this country
+                    if ((greatest_shadow->jd_total_end[offset] > 0) &&
+                        ((cl->countryList[country].jd_total_end == 0) ||
+                         (greatest_shadow->jd_total_end[offset] > cl->countryList[country].jd_total_end))) {
+                        cl->countryList[country].jd_total_end = greatest_shadow->jd_total_end[offset];
+                    }
+
+                    // Update latest time of partial eclipse in this country
+                    if ((greatest_shadow->jd_partial_end[offset] > 0) &&
+                        ((cl->countryList[country].jd_partial_end == 0) ||
+                         (greatest_shadow->jd_partial_end[offset] > cl->countryList[country].jd_partial_end))) {
+                        cl->countryList[country].jd_partial_end = greatest_shadow->jd_partial_end[offset];
+                    }
+                }
             }
         }
 
@@ -196,8 +242,9 @@ void country_lookup_max_eclipse(country_lookup_handle *cl, const settings *confi
         const int is_total = eclipse_path->paths[i].is_total;
         for (int j = 0; j < eclipse_path->paths[i].point_count; j++) {
             // Look up the coordinates of this point
-            const double longitude = eclipse_path->paths[i].path[j].longitude * 180 / M_PI;
-            const double latitude = eclipse_path->paths[i].path[j].latitude * 180 / M_PI;
+            const path_point *point = &eclipse_path->paths[i].path[j];
+            const double longitude = point->longitude * 180 / M_PI;
+            const double latitude = point->latitude * 180 / M_PI;
 
             int p0 = (int) ((longitude + 180.) * cl->worldMapWidth / 360.);
             int p1 = (int) ((90. - latitude) * cl->worldMapHeight / 180.);
@@ -208,35 +255,93 @@ void country_lookup_max_eclipse(country_lookup_handle *cl, const settings *confi
 
             const int country = cl->worldMapArray[p1 * cl->worldMapWidth + p0];
 
-            double shadow_new = is_total ? 1.02 : 1.01;
-            if (shadow_new > cl->countryList[country].max_eclipse) {
-                cl->countryList[country].max_eclipse = shadow_new;
+            if (country > 0) {
+                const double shadow_new = is_total ? 1.02 : 1.01;
+
+                // Update maximum magnitude of eclipse in this country
+                if (shadow_new > cl->countryList[country].max_eclipse) {
+                    cl->countryList[country].max_eclipse = shadow_new;
+                }
+
+                // Update earliest time of total eclipse in this country
+                if ((cl->countryList[country].jd_total_start == 0) ||
+                    (point->jd < cl->countryList[country].jd_total_start)) {
+                    cl->countryList[x].jd_total_start = point->jd;
+                }
+
+                // Update latest time of total eclipse in this country
+                if ((cl->countryList[country].jd_total_end == 0) ||
+                    (point->jd > cl->countryList[country].jd_total_end)) {
+                    cl->countryList[x].jd_total_end = point->jd;
+                }
             }
         }
     }
 
     // Start writing JSON output
-    char output_filename[FNAME_LENGTH];
-    sprintf(output_filename, "%s/maximumEclipse.json", config->output_dir);
-    f = fopen(output_filename, "w");
-    fprintf(f, "{\"byuid\":{");
-    y = 0;
-    for (x = 1000; x < 2000; x++)
-        if ((cl->countryList[x].red) || (cl->countryList[x].grn) || (cl->countryList[x].blu))
+    {
+        char output_filename[FNAME_LENGTH];
+        sprintf(output_filename, "%s/maximumEclipse.json", config->output_dir);
+        f = fopen(output_filename, "w");
+        fprintf(f, "{\"byuid\":{");
+        int first = 1;
+        for (x = 1000; x < 2000; x++)
+            if ((cl->countryList[x].red) || (cl->countryList[x].grn) || (cl->countryList[x].blu))
+                if (cl->countryList[x].max_eclipse > 0.01) {
+                    if (!first) fprintf(f, ",");
+
+                    // Time limits of eclipse are output as unix times, in UT (not TT)
+                    fprintf(f, "\"%d\":[%d,%.0f,%.0f,%.0f,%.0f]",
+                            x, (int) (cl->countryList[x].max_eclipse * 100),
+
+                            ((cl->countryList[x].jd_partial_start == 0) ? 0 :
+                             (unix_from_jd(cl->countryList[x].jd_partial_start) -
+                              delta_t(cl->countryList[x].jd_partial_start))),
+
+                            ((cl->countryList[x].jd_total_start == 0) ? 0 :
+                             (unix_from_jd(cl->countryList[x].jd_total_start) -
+                              delta_t(cl->countryList[x].jd_total_start))),
+
+                            ((cl->countryList[x].jd_total_end == 0) ? 0 :
+                             (unix_from_jd(cl->countryList[x].jd_total_end) -
+                              delta_t(cl->countryList[x].jd_total_end))),
+
+                            ((cl->countryList[x].jd_partial_end == 0) ? 0 :
+                             (unix_from_jd(cl->countryList[x].jd_partial_end) -
+                              delta_t(cl->countryList[x].jd_partial_end)))
+                    );
+                    first = 0;
+                }
+        fprintf(f, "},\"extras\":{");
+        first = 1;
+        for (x = 2000; x < COUNTRYLISTLEN; x++)
             if (cl->countryList[x].max_eclipse > 0.01) {
-                if (y) fprintf(f, ",");
-                fprintf(f, "\"%d\":%d", x, (int) (cl->countryList[x].max_eclipse * 100));
-                y = 1;
+                if (!first) fprintf(f, ",");
+
+                // Time limits of eclipse are output as unix times, in UT (not TT)
+                fprintf(f, "\"%s\":[%d,%.0f,%.0f,%.0f,%.0f]",
+                        cl->countryList[x].name, (int) (cl->countryList[x].max_eclipse * 100),
+
+                        ((cl->countryList[x].jd_partial_start == 0) ? 0 :
+                         (unix_from_jd(cl->countryList[x].jd_partial_start) -
+                          delta_t(cl->countryList[x].jd_partial_start))),
+
+                        ((cl->countryList[x].jd_total_start == 0) ? 0 :
+                         (unix_from_jd(cl->countryList[x].jd_total_start) -
+                          delta_t(cl->countryList[x].jd_total_start))),
+
+                        ((cl->countryList[x].jd_total_end == 0) ? 0 :
+                         (unix_from_jd(cl->countryList[x].jd_total_end) -
+                          delta_t(cl->countryList[x].jd_total_end))),
+
+                        ((cl->countryList[x].jd_partial_end == 0) ? 0 :
+                         (unix_from_jd(cl->countryList[x].jd_partial_end) -
+                          delta_t(cl->countryList[x].jd_partial_end)))
+                );
+                first = 0;
             }
-    fprintf(f, "},\"extras\":{");
-    y = 0;
-    for (x = 2000; x < COUNTRYLISTLEN; x++)
-        if (cl->countryList[x].max_eclipse > 0.01) {
-            if (y) fprintf(f, ",");
-            fprintf(f, "\"%s\":%d", cl->countryList[x].name, (int) (cl->countryList[x].max_eclipse * 100));
-            y = 1;
-        }
-    fprintf(f, "}}");
-    fclose(f);
+        fprintf(f, "}}");
+        fclose(f);
+    }
 }
 

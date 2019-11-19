@@ -266,13 +266,13 @@ void country_lookup_max_eclipse(country_lookup_handle *cl, const settings *confi
                 // Update earliest time of total eclipse in this country
                 if ((cl->countryList[country].jd_total_start == 0) ||
                     (point->jd < cl->countryList[country].jd_total_start)) {
-                    cl->countryList[x].jd_total_start = point->jd;
+                    cl->countryList[country].jd_total_start = point->jd;
                 }
 
                 // Update latest time of total eclipse in this country
                 if ((cl->countryList[country].jd_total_end == 0) ||
                     (point->jd > cl->countryList[country].jd_total_end)) {
-                    cl->countryList[x].jd_total_end = point->jd;
+                    cl->countryList[country].jd_total_end = point->jd;
                 }
             }
         }

@@ -176,6 +176,7 @@ void shadowContoursLabelPositions(const double *contourList, const shadow_map *s
  * @param shadow [in] - The array of shadow fractions within each pixel, which we are to draw contours from
  * @param x_offset [in] - Shift the output diagram horizontally by some number of pixels to place a longitude other than
  *                        zero at the centre.
+ * @param x_wrap [in] - Boolean flag indicating whether contours wrap around from the left/right edges.
  * @param stride [in] - The number of bytes separating consecutive rows in <frame>.
  * @param bold [in] - Boolean flag indicating whether to make contours bold
  * @param x_size [in] - The horizontal pixel size of the output image
@@ -183,18 +184,22 @@ void shadowContoursLabelPositions(const double *contourList, const shadow_map *s
  */
 void drawShadowContours(unsigned char *frame, const double *contourList, const shadow_map *shadow,
                         int *label_position_x, int *label_position_y,
-                        int x_offset, int stride, int x_size, int y_size) {
+                        int x_offset, int x_wrap, int stride, int x_size, int y_size) {
     int x, y, i, j;
 
     const colour yellow = {255, 255, 0};
     const colour red = {255, 0, 0};
 
     for (i = 0; contourList[i] >= 0; i++) {
-        double level = contourList[i] / 100.;
+        const double level = contourList[i] / 100.;
 
         const colour color = (level > 0.01) ? yellow : red;
+
+        const int x_min = x_wrap ? 0 : 1;
+        const int x_max = x_wrap ? x_size : (x_size - 1);
+
         for (y = 1; y < y_size - 1; y++)
-            for (x = 0; x < x_size; x++) {
+            for (x = x_min; x < x_max; x++) {
                 if (test_pixel(shadow, x, y, x_size, level)) {
                     const int x_output = X_FIX(x - x_offset);
 

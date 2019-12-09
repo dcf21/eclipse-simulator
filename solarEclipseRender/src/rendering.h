@@ -37,7 +37,7 @@ void shadowContoursLabelPositions(const double *contourList, const shadow_map *s
 
 void drawShadowContours(unsigned char *frame, const double *contourList, const shadow_map *shadow,
                         int *label_position_x, int *label_position_y,
-                        int x_offset, int stride, int x_size, int y_size);
+                        int x_offset, int x_wrap, int stride, int x_size, int y_size);
 
 void chart_label(cairo_t *cairo_draw, colour colour, const char *label,
                  double x_canvas, double y_canvas, int h_align, int v_align,

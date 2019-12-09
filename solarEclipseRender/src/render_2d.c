@@ -163,7 +163,7 @@ void render_2d_eclipse_map(settings *config, double jd, jpeg_ptr earthDay, jpeg_
                                  &label_position_x, &label_position_y,
                                  previous_label_position_x, previous_label_position_y);
     drawShadowContours(pixel_data, contourList, shadow_map, label_position_x, label_position_y,
-                       x_offset, stride, config->x_size_2d, config->y_size_2d);
+                       x_offset, 1, stride, config->x_size_2d, config->y_size_2d);
 
     // Turn bitmap data into a Cairo surface
     cairo_surface_t *surface = cairo_image_surface_create_for_data(pixel_data, CAIRO_FORMAT_ARGB32,

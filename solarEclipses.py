@@ -4,7 +4,7 @@
 #
 # The python script in this file makes eclipse simulations.
 #
-# Copyright (C) 2012-2019 Dominic Ford <dcf21-www@dcford.org.uk>
+# Copyright (C) 2012-2020 Dominic Ford <dcf21-www@dcford.org.uk>
 #
 # This code is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -262,9 +262,9 @@ if __name__ == "__main__":
 
     # Read command-line arguments
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--year-min', dest='year_min', type=int, default=2019,
+    parser.add_argument('--year-min', dest='year_min', type=int, default=2020,
                         help="The earliest year for which to compute eclipse simulations.")
-    parser.add_argument('--year-max', dest='year_max', type=int, default=2019,
+    parser.add_argument('--year-max', dest='year_max', type=int, default=2021,
                         help="The latest year for which to compute eclipse simulations.")
     args = parser.parse_args()
 

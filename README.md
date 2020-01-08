@@ -27,7 +27,7 @@ The simulator does not run under Windows.
 ### License
 
 This code is distributed under the Gnu General Public License. It is (C)
-Dominic Ford 2012 - 2019.
+Dominic Ford 2012 - 2020.
 
 ### Set up
 
@@ -40,7 +40,7 @@ size will be around 500 MB. These files are only downloaded the first time this
 script is run.
 
 The script will then proceed to run some demo simulations; by default it
-simulates the eclipses of 2019 and 2020. Each simulation takes around 45
+simulates the eclipses of 2020 and 2021. Each simulation takes around 45
 minutes on a single core of a modern computer (e.g. Intel i7 8700), or around
 120 minutes on a machine dating from around 2010. If your computer has multiple
 cores, multiple simulations will run on parallel on the various cores.

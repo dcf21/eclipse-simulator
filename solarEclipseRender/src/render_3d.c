@@ -1,7 +1,7 @@
 // render_3d.c
 
 // -------------------------------------------------
-// Copyright 2019 Dominic Ford.
+// Copyright 2019-2020 Dominic Ford.
 
 // This file is part of EclipseRender.
 
@@ -211,7 +211,7 @@ void render_3d_eclipse_map(settings *config, double jd, jpeg_ptr earthDay,
                     240, 66);
     cairo_fill(cairo_draw);
 
-    sprintf(text, "\u00A9 Dominic Ford 2012\u20132019");
+    sprintf(text, "\u00A9 Dominic Ford 2012\u20132020");
     chart_label(cairo_draw, yellow, text, config->x_size_3d - 12, config->y_size_3d - 44, 1, 0, 14, 1, 0);
 
     sprintf(text, "https://in-the-sky.org/");

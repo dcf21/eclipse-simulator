@@ -24,9 +24,10 @@ VERSION = 2.0
 DATE    = 15/09/2019
 PATHLINK= /
 
-COMPILE = $(CC) -Wall -g -c -I $(CWD)/src `mysql_config --cflags`
+WARNINGS= -Wall -Wno-format-truncation -Wno-unused-result
+COMPILE = $(CC) $(WARNINGS) -g -c -I $(CWD)/src `mysql_config --cflags`
 LIBS    = -lcairo -lgsl -lgslcblas -lpng -lz -ljpeg -lm
-LINK    = $(CC) -Wall -g
+LINK    = $(CC) $(WARNINGS) -g
 
 OPTIMISATION = -O3 -march=native
 

@@ -270,11 +270,11 @@ if __name__ == "__main__":
 
     # We require the ephemerisCompute code. Make sure we have this now.
     # We run a dummy ephemeris, in order to make sure that binaries versions of text files are generated now.
-    ephemeris_compute_path = os.path.join(src_path, "ephemeris-compute")
+    ephemeris_compute_path = os.path.join(src_path, "ephemeris-compute-de430")
     if not os.path.exists(ephemeris_compute_path):
-        logging.info("Installing dependant code from <https://github.com/dcf21/ephemeris-compute.git>")
-        os.system("git clone https://github.com/dcf21/ephemeris-compute.git")
-        os.system("cd ephemeris-compute ; ./setup.sh ; cd bin ; ./ephem.bin")
+        logging.info("Installing dependant code from <https://github.com/dcf21/ephemeris-compute-de430.git>")
+        os.system("git clone https://github.com/dcf21/ephemeris-compute-de430.git")
+        os.system("cd ephemeris-compute-de430 ; ./setup.sh ; cd bin ; ./ephem.bin")
 
     # Make eclipse simulations
     solar_eclipses(year_min=args.year_min, year_max=args.year_max)

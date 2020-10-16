@@ -254,7 +254,7 @@ def make_kml():
 </p><p>
 Calculated using Dominic Ford's <a href="https://github.com/dcf21/eclipse-simulator">Eclipse Simulator</a>
 <br />
-based on the <a href="https://github.com/dcf21/ephemeris-compute">JPL DE405 ephemeris</a>.
+based on the <a href="https://github.com/dcf21/ephemeris-compute-de430">JPL DE430 ephemeris</a>.
 </p><p>
 Downloaded from <a href="https://in-the-sky.org/eclipses">In-The-Sky.org</a>
 </p>

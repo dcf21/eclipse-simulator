@@ -34,7 +34,7 @@ void fetch_ephemeris(const settings *config, ephemeris **output) {
     char ephemeris_compute_path[FNAME_LENGTH];
 
     sprintf(ephemeris_compute_path,
-            "%s/../../ephemeris-compute/bin/serial/ephem.bin",
+            "%s/../../ephemeris-compute-de430/bin/serial/ephem.bin",
             SRCDIR);
 
     // Compute data points at this interval (measured in days)

@@ -26,15 +26,19 @@
 #include "map_greatest_eclipse.h"
 #include "settings.h"
 
+#define CONTOUR_MAX_LENGTH 50000
+
 typedef struct contour_line {
-    double longitude[50000]; // radians
-    double latitude[50000]; // radians
+    double longitude[CONTOUR_MAX_LENGTH]; // radians
+    double latitude[CONTOUR_MAX_LENGTH]; // radians
     int point_count;
     double eclipse_magnitude;
 } contour_line;
 
+#define CONTOUR_LINE_COUNT_MAX 20
+
 typedef struct contour_line_list {
-    contour_line line[10];
+    contour_line line[CONTOUR_LINE_COUNT_MAX];
     int contour_count;
 } contour_line_list;
 

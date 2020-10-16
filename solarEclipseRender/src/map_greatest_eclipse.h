@@ -28,7 +28,7 @@
 // Data structure for storing the path of greatest eclipse
 
 #define MAX_PATH_LENGTH 2500
-#define MAX_PATH_ITEMS 10
+#define MAX_PATH_ITEMS 20
 
 typedef struct path_point {
     double latitude, longitude; // radians

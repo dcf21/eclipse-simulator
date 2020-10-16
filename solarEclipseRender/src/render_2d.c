@@ -338,6 +338,14 @@ void trace_eclipse_contour(cairo_t *cairo_draw, const settings *config, double x
     }
 }
 
+uint32_t colour_to_uint32(colour colour_this) {
+    return ((uint32_t) colour_this.blu +  // blue
+            ((uint32_t) colour_this.grn << (unsigned) 8) +  // green
+            ((uint32_t) colour_this.red << (unsigned) 16) + // red
+            ((uint32_t) 255 << (unsigned) 24)  // alpha
+    );
+}
+
 /**
  * render_2d_maximum_extent - Render a flat 2D world map of the maximum extent of the eclipse
  * @param cl [in] - Data structure used to look up which country any given (lat,lng) is within
@@ -358,11 +366,22 @@ void render_2d_maximum_extent(const country_lookup_handle *cl, const settings *c
 
     // Allocate buffer for image data
     unsigned char *pixel_data = malloc(stride * config->y_size_2d);
+    int *temporary_country_map = (int *)malloc(stride * config->y_size_2d);
 
     // Horizontally shift map of the world to put the point of greatest eclipse at the centre
     int x_offset = (int) (config->solar_longitude_at_midpoint * config->x_size_2d / 360);
     if (x_offset > config->x_size_2d / 2) x_offset -= config->x_size_2d;
     if (x_offset < -config->x_size_2d / 2) x_offset += config->x_size_2d;
+
+    // Colors to use for shading map
+    const colour colour_land = {188, 205, 173};
+    const uint32_t colour_land_uint32 = colour_to_uint32(colour_land);
+    const colour colour_sea = {139, 189, 224};
+    const uint32_t colour_sea_uint32 = colour_to_uint32(colour_sea);
+    const colour colour_border = {165, 185, 180};
+    const uint32_t colour_border_uint32 = colour_to_uint32(colour_border);
+    const colour colour_coast = {128, 128, 128};
+    const uint32_t colour_coast_uint32 = colour_to_uint32(colour_coast);
 
     // Loop over all the pixels in the image we are to produce
     for (y = 0; y < config->y_size_2d; y++)
@@ -377,32 +396,76 @@ void render_2d_maximum_extent(const country_lookup_handle *cl, const settings *c
             // Look up whether this pixel is land or sea
             int country = test_if_land_or_sea(cl, longitude, latitude);
 
-            // Work out color of this pixel
-            colour colour_this = {0, 0, 0};
+            // Work out position of this pixel in the output array
+            const int output_offset = ((x - x_offset + config->x_size_2d) % config->x_size_2d) * 4 + y * stride;
+            const int output_offset_left =
+                    ((x - 1 - x_offset + config->x_size_2d) % config->x_size_2d) * 4 + y * stride;
+            const int output_offset_above =
+                    ((x - x_offset + config->x_size_2d) % config->x_size_2d) * 4 + (y - 1) * stride;
+            const int output_offset_left_above =
+                    ((x - 1 - x_offset + config->x_size_2d) % config->x_size_2d) * 4 + (y - 1) * stride;
+
+            // Store map of countries in each pixel
+            temporary_country_map[output_offset / 4] = country;
+
+            // Work out what colour this pixel should be
+            uint32_t colour_this = 0;
 
             if (country > 0) {
-
                 // Land
-                const colour colour_land = {188, 205, 173};
-                colour_this = colour_land;
+                colour_this = colour_land_uint32;
 
+                // Shade borders between countries
+                if ((x > 0) && (temporary_country_map[output_offset_left / 4] != country)) {
+                    colour_this = colour_border_uint32;
+                }
+
+                if ((y > 0) && (temporary_country_map[output_offset_above / 4] != country)) {
+                    colour_this = colour_border_uint32;
+                }
+
+                if ((y > 0) && (x > 0) && (temporary_country_map[output_offset_left_above / 4] != country)) {
+                    colour_this = colour_border_uint32;
+                }
+
+                // Shade coastlines between land and sea
+                if ((x > 0) && (*(uint32_t *) &pixel_data[output_offset_left] == colour_sea_uint32)) {
+                    colour_this = colour_coast_uint32;
+                }
+
+                if ((y > 0) && (*(uint32_t *) &pixel_data[output_offset_above] == colour_sea_uint32)) {
+                    colour_this = colour_coast_uint32;
+                }
+
+                if ((y > 0) && (x > 0) &&
+                    (*(uint32_t *) &pixel_data[output_offset_left_above] == colour_sea_uint32)) {
+                    colour_this = colour_coast_uint32;
+                }
             } else if (country == 0) {
-
                 // Sea
-                const colour colour_sea = {139, 189, 224};
-                colour_this = colour_sea;
+                colour_this = colour_sea_uint32;
 
+                // Shade coastlines between land and sea
+                if ((x > 0) && (*(uint32_t *) &pixel_data[output_offset_left] != colour_sea_uint32)) {
+                    *(uint32_t *) &pixel_data[output_offset_left] = colour_coast_uint32;
+                }
+
+                if ((y > 0) && (*(uint32_t *) &pixel_data[output_offset_above] != colour_sea_uint32)) {
+                    *(uint32_t *) &pixel_data[output_offset_above] = colour_coast_uint32;
+                }
+
+                if ((y > 0) && (x > 0) &&
+                    (*(uint32_t *) &pixel_data[output_offset_left_above] != colour_sea_uint32)) {
+                    *(uint32_t *) &pixel_data[output_offset_left_above] = colour_coast_uint32;
+                }
             }
 
-            // Set pixel color
-            const int output_offset = ((x - x_offset + config->x_size_2d) % config->x_size_2d) * 4 + y * stride;
-
-            *(uint32_t *) &pixel_data[output_offset] = ((uint32_t) colour_this.blu +  // blue
-                                                        ((uint32_t) colour_this.grn << (unsigned) 8) +  // green
-                                                        ((uint32_t) colour_this.red << (unsigned) 16) + // red
-                                                        ((uint32_t) 255 << (unsigned) 24)  // alpha
-            );
+            // Set pixel output colour
+            *(uint32_t *) &pixel_data[output_offset] = colour_this;
         }
+
+    // Free country map
+    free(temporary_country_map);
 
     // Overlay contours of eclipse magnitude on top of the map
     const double contourList[] = {80, 60, 40, 20, 1e-6, -1};
@@ -525,6 +588,7 @@ void render_2d_maximum_extent(const country_lookup_handle *cl, const settings *c
             cairo_new_sub_path(cairo_draw);
             cairo_arc(cairo_draw, label_position_x[i], label_position_y[i], 18, 0, 2 * M_PI);
         }
+
     // We want to clip outside the circles where the labels are, so add an extra path around the outside of plot
     cairo_new_sub_path(cairo_draw);
     cairo_rectangle(cairo_draw, 0, 0, config->x_size_2d, config->y_size_2d);
@@ -547,6 +611,8 @@ void render_2d_maximum_extent(const country_lookup_handle *cl, const settings *c
         // Stroke path
         cairo_stroke(cairo_draw);
     }
+
+    // Undo clipping operation
     cairo_restore(cairo_draw);
 
     // Get date components (in UT; not TT)
@@ -559,13 +625,15 @@ void render_2d_maximum_extent(const country_lookup_handle *cl, const settings *c
     // Write the time and date in bottom left corner of the image
     char text[FNAME_LENGTH];
 
-    cairo_set_source_rgba(cairo_draw, 1, 1, 1, 0.5);
+    cairo_set_source_rgba(cairo_draw, 1, 1, 1, 0.45);
     cairo_rectangle(cairo_draw,
                     0, config->y_size_2d - 95,
                     190, 95);
-    cairo_fill_preserve(cairo_draw);
-    cairo_set_line_width(cairo_draw, 1);
-    cairo_set_source_rgb(cairo_draw, 0.25, 0.25, 0.25);
+    cairo_fill(cairo_draw);
+    cairo_move_to(cairo_draw, 0, config->y_size_2d - 95);
+    cairo_line_to(cairo_draw, 190, config->y_size_2d - 95);
+    cairo_set_line_width(cairo_draw, 2);
+    cairo_set_source_rgb(cairo_draw, 0.2, 0.2, 0.667);
     cairo_stroke(cairo_draw);
 
     sprintf(text, "Greatest Eclipse");
@@ -578,13 +646,15 @@ void render_2d_maximum_extent(const country_lookup_handle *cl, const settings *c
     chart_label(cairo_draw, black, text, 95, config->y_size_2d - 49, 0, 0, 28, 1, 0);
 
     // Write copyright text in bottom right corner of the image
-    cairo_set_source_rgba(cairo_draw, 1, 1, 1, 0.5);
+    cairo_set_source_rgba(cairo_draw, 1, 1, 1, 0.45);
     cairo_rectangle(cairo_draw,
                     config->x_size_2d - 240, config->y_size_2d - 66,
                     240, 66);
-    cairo_fill_preserve(cairo_draw);
-    cairo_set_line_width(cairo_draw, 1);
-    cairo_set_source_rgb(cairo_draw, 0.25, 0.25, 0.25);
+    cairo_fill(cairo_draw);
+    cairo_move_to(cairo_draw, config->x_size_2d - 240, config->y_size_2d - 66);
+    cairo_line_to(cairo_draw, config->x_size_2d, config->y_size_2d - 66);
+    cairo_set_line_width(cairo_draw, 2);
+    cairo_set_source_rgb(cairo_draw, 0.2, 0.2, 0.667);
     cairo_stroke(cairo_draw);
 
     sprintf(text, "\u00A9 Dominic Ford 2012\u20132020");
@@ -594,13 +664,16 @@ void render_2d_maximum_extent(const country_lookup_handle *cl, const settings *c
     chart_label(cairo_draw, black, text, config->x_size_2d - 12, config->y_size_2d - 18, 1, 0, 14, 1, 0);
 
     // Write duration in the top left corner of the image
-    cairo_set_source_rgba(cairo_draw, 1, 1, 1, 0.5);
+    const int duration_height = (eclipse_path->maximum_duration > 0) ? 70 : 35;
+    cairo_set_source_rgba(cairo_draw, 1, 1, 1, 0.45);
     cairo_rectangle(cairo_draw,
                     0, 0,
-                    166, (eclipse_path->maximum_duration > 0) ? 70 : 35);
-    cairo_fill_preserve(cairo_draw);
-    cairo_set_line_width(cairo_draw, 1);
-    cairo_set_source_rgb(cairo_draw, 0.25, 0.25, 0.25);
+                    166, duration_height);
+    cairo_fill(cairo_draw);
+    cairo_move_to(cairo_draw, 0, duration_height);
+    cairo_line_to(cairo_draw, 166, duration_height);
+    cairo_set_line_width(cairo_draw, 2);
+    cairo_set_source_rgb(cairo_draw, 0.2, 0.2, 0.667);
     cairo_stroke(cairo_draw);
 
     sprintf(text, eclipse_path->maximum_duration > 0 ? "Greatest duration" : "Partial eclipse");
@@ -611,13 +684,15 @@ void render_2d_maximum_extent(const country_lookup_handle *cl, const settings *c
                 (int) eclipse_path->maximum_duration % 60);
         chart_label(cairo_draw, black, text, 125, 50, 0, 0, 15, 1, 0);
 
-        cairo_set_source_rgba(cairo_draw, 1, 1, 1, 0.5);
+        cairo_set_source_rgba(cairo_draw, 1, 1, 1, 0.45);
         cairo_rectangle(cairo_draw,
                         config->x_size_2d - 240, 0,
                         240, 35);
-        cairo_fill_preserve(cairo_draw);
-        cairo_set_line_width(cairo_draw, 1);
-        cairo_set_source_rgb(cairo_draw, 0.25, 0.25, 0.25);
+        cairo_fill(cairo_draw);
+        cairo_move_to(cairo_draw, config->x_size_2d - 240, 35);
+        cairo_line_to(cairo_draw, config->x_size_2d, 35);
+        cairo_set_line_width(cairo_draw, 2);
+        cairo_set_source_rgb(cairo_draw, 0.2, 0.2, 0.667);
         cairo_stroke(cairo_draw);
 
         chart_label(cairo_draw, black, config->title, config->x_size_2d - 120, 20, 0, 0, 15, 1, 0);

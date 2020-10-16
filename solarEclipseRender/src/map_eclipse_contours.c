@@ -263,6 +263,11 @@ void register_point(const objective_function *f, line_status *s, int x, int y) {
         line_output->latitude[line_output->point_count] = latitude;
         line_output->eclipse_magnitude = f->contour_level;
         line_output->point_count++;
+
+        // Check for overflow
+        if (line_output->point_count >= CONTOUR_MAX_LENGTH) {
+            logging_fatal(__FILE__, __LINE__, "Contour line list overflow. Increase CONTOUR_MAX_LENGTH.");
+        }
     }
 }
 
@@ -416,6 +421,11 @@ void trace_contour(FILE *output_stream, contour_line_list *output_line_list,
 
     // Increment contour counter
     output_line_list->contour_count++;
+
+   // Check for contour count overflow
+   if (output_line_list->contour_count > CONTOUR_LINE_COUNT_MAX) {
+       logging_fatal(__FILE__, __LINE__, "Contour line list overflow. Increase CONTOUR_LINE_COUNT_MAX.");
+   }
 }
 
 /**

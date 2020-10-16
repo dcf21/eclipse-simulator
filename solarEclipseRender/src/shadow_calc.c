@@ -321,7 +321,7 @@ void shadow_map_free(shadow_map *item) {
     free(item->jd_total_end);
     free(item->jd_partial_end);
     free(item);
-};
+}
 
 /**
  * calculate_where_sun_overhead - Calculate the latitude and longitude on Earth where the Sun is overhead at a

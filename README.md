@@ -56,3 +56,7 @@ particular eclipse, pass the command-line switches `--year-min` and
 ./solarEclipses.py --year-min 2025 --year-max 2030
 ```
 
+## Author
+
+This code was developed by Dominic Ford <https://dcford.org.uk>. It is distributed under the Gnu General Public License V3.
+
